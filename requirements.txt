@@ -1,0 +1,23 @@
+# InfraGuard AIOps - Python Dependencies
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Machine Learning
+scikit-learn>=1.3.0
+prophet>=1.1.0
+
+# HTTP Client
+requests>=2.31.0
+
+# Configuration
+pyyaml>=6.0
+
+# Testing
+pytest>=7.4.0
+hypothesis>=6.82.0
+pytest-cov>=4.1.0
+
+# Logging (built-in, but listing for documentation)
+# logging - standard library
