@@ -1,0 +1,509 @@
+---
+title: 'Installation'
+description: 'Install InfraGuard in your environment'
+---
+
+## Installation Methods
+
+Choose the installation method that best fits your environment:
+
+<CardGroup cols={3}>
+  <Card title="Docker Compose" icon="docker" href="#docker-compose">
+    Quick local setup
+  </Card>
+  <Card title="Kubernetes" icon="dharmachakra" href="#kubernetes">
+    Production deployment
+  </Card>
+  <Card title="From Source" icon="code" href="#from-source">
+    Development setup
+  </Card>
+</CardGroup>
+
+## Docker Compose
+
+Perfect for local development and testing.
+
+### Prerequisites
+
+- Docker 20.10+
+- Docker Compose 1.29+
+
+### Installation Steps
+
+<Steps>
+  <Step title="Clone Repository">
+    ```bash
+    git clone https://github.com/your-org/infraguard.git
+    cd infraguard
+    ```
+  </Step>
+  
+  <Step title="Configure Environment">
+    Create `.env` file:
+    ```bash
+    cp .env.example .env
+    # Edit .env with your credentials
+    ```
+  </Step>
+  
+  <Step title="Start Services">
+    ```bash
+    docker-compose up -d
+    ```
+  </Step>
+  
+  <Step title="Verify Installation">
+    ```bash
+    docker-compose ps
+    ```
+    All services should show status `Up`.
+  </Step>
+</Steps>
+
+### Services Included
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Prometheus | 9090 | Metrics database |
+| InfraGuard | 8000 | Main application |
+| Grafana | 3000 | Visualization |
+| Dummy App | 8080 | Test metrics generator |
+
+## Kubernetes
+
+Recommended for production deployments.
+
+### Prerequisites
+
+- Kubernetes 1.21+
+- kubectl CLI
+- Helm 3+ (optional)
+
+### Installation Steps
+
+<Steps>
+  <Step title="Create Namespace">
+    ```bash
+    kubectl create namespace infraguard
+    ```
+  </Step>
+  
+  <Step title="Create Secrets">
+    ```bash
+    kubectl create secret generic infraguard-secrets \
+      --from-literal=jira-api-token='your-token' \
+      --namespace=infraguard
+    ```
+  </Step>
+  
+  <Step title="Apply ConfigMap">
+    ```bash
+    kubectl apply -f k8s/configmap.yaml
+    ```
+  </Step>
+  
+  <Step title="Create PVC">
+    ```bash
+    kubectl apply -f k8s/pvc.yaml
+    ```
+  </Step>
+  
+  <Step title="Deploy Application">
+    ```bash
+    kubectl apply -f k8s/deployment.yaml
+    ```
+  </Step>
+  
+  <Step title="Verify Deployment">
+    ```bash
+    kubectl get pods -n infraguard
+    kubectl logs -f deployment/infraguard -n infraguard
+    ```
+  </Step>
+</Steps>
+
+### Helm Installation (Alternative)
+
+<CodeGroup>
+
+```bash Add Helm Repo
+helm repo add infraguard https://charts.infraguard.io
+helm repo update
+```
+
+```bash Install Chart
+helm install infraguard infraguard/infraguard \
+  --namespace infraguard \
+  --create-namespace \
+  --set jira.apiToken=your-token \
+  --set slack.webhookUrl=your-webhook
+```
+
+```bash Verify Installation
+helm status infraguard -n infraguard
+```
+
+</CodeGroup>
+
+### Configuration
+
+Edit `k8s/configmap.yaml` to customize:
+
+```yaml k8s/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: infraguard-config
+  namespace: infraguard
+data:
+  settings.yaml: |
+    prometheus:
+      url: "http://prometheus-server.monitoring.svc.cluster.local:9090"
+    ml:
+      confidence_threshold: 85.0
+    alerting:
+      slack:
+        webhook_url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+      jira:
+        api_url: "https://your-company.atlassian.net"
+        project_key: "INC"
+```
+
+## From Source
+
+For development and customization.
+
+### Prerequisites
+
+- Python 3.9+
+- pip or poetry
+- Git
+
+### Installation Steps
+
+<Steps>
+  <Step title="Clone Repository">
+    ```bash
+    git clone https://github.com/your-org/infraguard.git
+    cd infraguard
+    ```
+  </Step>
+  
+  <Step title="Create Virtual Environment">
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
+  </Step>
+  
+  <Step title="Install Dependencies">
+    ```bash
+    pip install -r requirements.txt
+    ```
+  </Step>
+  
+  <Step title="Configure Settings">
+    ```bash
+    cp src/config/settings.yaml.example src/config/settings.yaml
+    # Edit settings.yaml with your configuration
+    ```
+  </Step>
+  
+  <Step title="Run Application">
+    ```bash
+    python main.py
+    ```
+  </Step>
+</Steps>
+
+### Development Dependencies
+
+For development, install additional dependencies:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+This includes:
+- pytest - Testing framework
+- hypothesis - Property-based testing
+- flake8 - Linting
+- black - Code formatting
+- mypy - Type checking
+
+## System Requirements
+
+### Minimum Requirements
+
+<CardGroup cols={2}>
+  <Card title="CPU" icon="microchip">
+    0.25 cores (250m)
+  </Card>
+  <Card title="Memory" icon="memory">
+    512 MB RAM
+  </Card>
+  <Card title="Storage" icon="hard-drive">
+    1 GB disk space
+  </Card>
+  <Card title="Network" icon="network-wired">
+    Access to Prometheus API
+  </Card>
+</CardGroup>
+
+### Recommended Requirements
+
+<CardGroup cols={2}>
+  <Card title="CPU" icon="microchip">
+    0.5 cores (500m)
+  </Card>
+  <Card title="Memory" icon="memory">
+    1 GB RAM
+  </Card>
+  <Card title="Storage" icon="hard-drive">
+    5 GB disk space
+  </Card>
+  <Card title="Network" icon="network-wired">
+    Low latency to Prometheus
+  </Card>
+</CardGroup>
+
+## Dependencies
+
+### Python Packages
+
+```txt requirements.txt
+pandas>=1.5.0
+numpy>=1.23.0
+scikit-learn>=1.2.0
+prophet>=1.1.0
+requests>=2.28.0
+pyyaml>=6.0
+prometheus-api-client>=0.5.0
+```
+
+### External Services
+
+<AccordionGroup>
+  <Accordion title="Prometheus (Required)">
+    InfraGuard requires a Prometheus instance to query metrics from.
+    
+    **Minimum Version**: 2.30+
+    
+    **Configuration**: Ensure Prometheus is accessible via HTTP and has metrics to scrape.
+  </Accordion>
+  
+  <Accordion title="Slack (Optional)">
+    For Slack notifications, you need:
+    - Slack workspace with admin access
+    - Incoming webhook URL
+    
+    **Setup**: Create webhook at https://api.slack.com/messaging/webhooks
+  </Accordion>
+  
+  <Accordion title="Jira (Optional)">
+    For Jira ticket creation, you need:
+    - Jira instance (Cloud or Server)
+    - API token with ticket creation permissions
+    - Project key for incident tickets
+    
+    **Setup**: Generate API token at https://id.atlassian.com/manage-profile/security/api-tokens
+  </Accordion>
+  
+  <Accordion title="Grafana (Optional)">
+    For visualization, you need:
+    - Grafana instance
+    - Prometheus data source configured
+    
+    **Setup**: Import the provided dashboard JSON from `dashboards/infraguard-grafana.json`
+  </Accordion>
+</AccordionGroup>
+
+## Verification
+
+After installation, verify InfraGuard is working correctly:
+
+### Check Health Endpoint
+
+```bash
+curl http://localhost:8000/health
+```
+
+Expected response:
+```json
+{
+  "status": "healthy",
+  "model_loaded": true,
+  "last_collection": "2026-04-06T10:30:00Z"
+}
+```
+
+### Check Logs
+
+<CodeGroup>
+
+```bash Docker
+docker logs -f infraguard-app
+```
+
+```bash Kubernetes
+kubectl logs -f deployment/infraguard -n infraguard
+```
+
+```bash Local
+tail -f logs/infraguard.log
+```
+
+</CodeGroup>
+
+Look for:
+- ✅ "Loaded pre-trained ML model"
+- ✅ "Starting collection cycle"
+- ✅ "Collected X metrics from Prometheus"
+
+### Test Anomaly Detection
+
+Trigger a test anomaly:
+
+```bash
+# If using dummy app
+curl -X POST http://localhost:8080/spike
+
+# Watch for detection
+docker logs -f infraguard-app | grep "Anomaly detected"
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection refused to Prometheus">
+    **Cause**: InfraGuard cannot reach Prometheus API
+    
+    **Solution**:
+    1. Verify Prometheus URL in configuration
+    2. Check network connectivity
+    3. Ensure Prometheus is running
+    
+    ```bash
+    curl http://prometheus:9090/-/healthy
+    ```
+  </Accordion>
+  
+  <Accordion title="Model file not found">
+    **Cause**: Pre-trained model is missing
+    
+    **Solution**:
+    1. Train a model using historical data
+    2. Or download pre-trained model
+    
+    ```bash
+    python scripts/train_model.py
+    ```
+  </Accordion>
+  
+  <Accordion title="Permission denied errors">
+    **Cause**: Container running as root or incorrect file permissions
+    
+    **Solution**:
+    1. Ensure volumes have correct permissions
+    2. Check container user configuration
+    
+    ```bash
+    chmod -R 755 models/ logs/
+    ```
+  </Accordion>
+  
+  <Accordion title="Out of memory errors">
+    **Cause**: Insufficient memory allocation
+    
+    **Solution**:
+    1. Increase memory limits in deployment
+    2. Reduce number of metrics monitored
+    3. Adjust ML model parameters
+    
+    ```yaml
+    resources:
+      limits:
+        memory: "1Gi"  # Increase from 512Mi
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Upgrading
+
+### Docker Compose
+
+```bash
+docker-compose pull
+docker-compose up -d
+```
+
+### Kubernetes
+
+```bash
+kubectl set image deployment/infraguard \
+  infraguard=infraguard:latest \
+  -n infraguard
+
+kubectl rollout status deployment/infraguard -n infraguard
+```
+
+### Helm
+
+```bash
+helm upgrade infraguard infraguard/infraguard \
+  --namespace infraguard \
+  --reuse-values
+```
+
+## Uninstalling
+
+### Docker Compose
+
+```bash
+docker-compose down -v
+```
+
+### Kubernetes
+
+```bash
+kubectl delete namespace infraguard
+```
+
+### Helm
+
+```bash
+helm uninstall infraguard -n infraguard
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/deployment/configuration"
+  >
+    Configure InfraGuard for your environment
+  </Card>
+  <Card
+    title="Integrations"
+    icon="plug"
+    href="/integrations/prometheus"
+  >
+    Set up Prometheus, Slack, and Jira
+  </Card>
+  <Card
+    title="Training Models"
+    icon="graduation-cap"
+    href="/guides/training-models"
+  >
+    Train custom ML models
+  </Card>
+  <Card
+    title="Monitoring"
+    icon="chart-line"
+    href="/advanced/monitoring"
+  >
+    Monitor InfraGuard itself
+  </Card>
+</CardGroup>

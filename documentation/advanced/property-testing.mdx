@@ -1,0 +1,369 @@
+---
+title: 'Property-Based Testing'
+description: 'Ensure correctness with property-based testing'
+icon: 'vial'
+---
+
+## Overview
+
+InfraGuard uses property-based testing (PBT) to verify correctness properties of the anomaly detection and forecasting systems.
+
+<Card title="What is Property-Based Testing?" icon="lightbulb">
+  Instead of testing specific examples, PBT verifies that properties hold for all possible inputs by generating hundreds of test cases automatically.
+</Card>
+
+## Core Properties
+
+### Anomaly Detection Properties
+
+<AccordionGroup>
+  <Accordion title="P1: Monotonicity">
+    **Property**: Higher anomaly scores indicate more anomalous behavior
+    
+    ```python
+    @given(st.lists(st.floats(min_value=0, max_value=100), min_size=100))
+    def test_anomaly_score_monotonicity(values):
+        detector = IsolationForestDetector()
+        detector.train(values)
+        
+        # More extreme values should have higher scores
+        normal_value = np.mean(values)
+        extreme_value = np.mean(values) + 5 * np.std(values)
+        
+        normal_score = detector.detect([normal_value])[0].score
+        extreme_score = detector.detect([extreme_value])[0].score
+        
+        assert extreme_score > normal_score
+    ```
+  </Accordion>
+  
+  <Accordion title="P2: Training Stability">
+    **Property**: Training on same data produces consistent models
+    
+    ```python
+    @given(st.lists(st.floats(min_value=0, max_value=100), min_size=100))
+    def test_training_stability(values):
+        detector1 = IsolationForestDetector(random_state=42)
+        detector2 = IsolationForestDetector(random_state=42)
+        
+        detector1.train(values)
+        detector2.train(values)
+        
+        test_values = values[:10]
+        scores1 = [d.score for d in detector1.detect(test_values)]
+        scores2 = [d.score for d in detector2.detect(test_values)]
+        
+        assert scores1 == scores2
+    ```
+  </Accordion>
+  
+  <Accordion title="P3: Scale Invariance">
+    **Property**: Scaling data doesn't change relative anomaly scores
+    
+    ```python
+    @given(
+        st.lists(st.floats(min_value=0, max_value=100), min_size=100),
+        st.floats(min_value=0.1, max_value=10)
+    )
+    def test_scale_invariance(values, scale_factor):
+        detector = IsolationForestDetector()
+        
+        # Train on original data
+        detector.train(values)
+        scores1 = [d.score for d in detector.detect(values[:10])]
+        
+        # Train on scaled data
+        scaled_values = [v * scale_factor for v in values]
+        detector.train(scaled_values)
+        scores2 = [d.score for d in detector.detect(scaled_values[:10])]
+        
+        # Relative ordering should be preserved
+        assert np.argsort(scores1) == np.argsort(scores2)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Forecasting Properties
+
+<AccordionGroup>
+  <Accordion title="P4: Forecast Continuity">
+    **Property**: Forecasts should be continuous (no sudden jumps)
+    
+    ```python
+    @given(st.lists(st.floats(min_value=0, max_value=100), min_size=200))
+    def test_forecast_continuity(values):
+        forecaster = ProphetForecaster()
+        forecaster.train(values)
+        
+        forecast = forecaster.predict(horizon_hours=24)
+        predictions = [p.yhat for p in forecast]
+        
+        # Check no sudden jumps (> 50% change)
+        for i in range(len(predictions) - 1):
+            change_pct = abs(predictions[i+1] - predictions[i]) / predictions[i]
+            assert change_pct < 0.5
+    ```
+  </Accordion>
+  
+  <Accordion title="P5: Confidence Interval Coverage">
+    **Property**: Actual values should fall within confidence intervals ~95% of the time
+    
+    ```python
+    @given(st.lists(st.floats(min_value=0, max_value=100), min_size=500))
+    def test_confidence_interval_coverage(values):
+        # Split into train/test
+        train_data = values[:400]
+        test_data = values[400:]
+        
+        forecaster = ProphetForecaster()
+        forecaster.train(train_data)
+        forecast = forecaster.predict(horizon_hours=len(test_data))
+        
+        # Count how many actuals fall within CI
+        within_ci = sum(
+            1 for actual, pred in zip(test_data, forecast)
+            if pred.yhat_lower <= actual <= pred.yhat_upper
+        )
+        
+        coverage = within_ci / len(test_data)
+        assert 0.90 <= coverage <= 0.98  # Allow some variance
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Alert Properties
+
+<AccordionGroup>
+  <Accordion title="P6: Alert Deduplication">
+    **Property**: Similar alerts within window are deduplicated
+    
+    ```python
+    @given(
+        st.lists(st.builds(Alert, severity=st.just("critical")), min_size=5, max_size=10),
+        st.integers(min_value=1, max_value=10)
+    )
+    def test_alert_deduplication(alerts, window_minutes):
+        alerter = Alerter(dedup_window=window_minutes)
+        
+        # Send all alerts
+        for alert in alerts:
+            alerter.send(alert)
+        
+        # Should be deduplicated
+        sent_alerts = alerter.get_sent_alerts()
+        assert len(sent_alerts) < len(alerts)
+    ```
+  </Accordion>
+  
+  <Accordion title="P7: Escalation Timing">
+    **Property**: Unacknowledged alerts escalate after timeout
+    
+    ```python
+    @given(
+        st.builds(Alert, severity=st.just("critical")),
+        st.integers(min_value=1, max_value=60)
+    )
+    def test_escalation_timing(alert, timeout_minutes):
+        alerter = Alerter(escalation_timeout=timeout_minutes)
+        
+        alert_id = alerter.send(alert)
+        
+        # Before timeout: no escalation
+        time.sleep((timeout_minutes - 1) * 60)
+        assert not alerter.is_escalated(alert_id)
+        
+        # After timeout: escalated
+        time.sleep(2 * 60)
+        assert alerter.is_escalated(alert_id)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Running Property Tests
+
+### Local Execution
+
+```bash
+# Run all property tests
+pytest tests/property/ -v
+
+# Run specific property
+pytest tests/property/test_detector_properties.py::test_monotonicity -v
+
+# Generate more examples
+pytest tests/property/ --hypothesis-seed=random --hypothesis-max-examples=1000
+```
+
+### CI/CD Integration
+
+```yaml
+# .github/workflows/property-tests.yml
+name: Property Tests
+
+on: [push, pull_request]
+
+jobs:
+  property-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install hypothesis pytest
+      
+      - name: Run property tests
+        run: pytest tests/property/ -v --hypothesis-max-examples=500
+```
+
+## Test Strategies
+
+### Data Generation
+
+```python
+from hypothesis import strategies as st
+
+# Generate realistic metric values
+metric_values = st.floats(
+    min_value=0,
+    max_value=100,
+    allow_nan=False,
+    allow_infinity=False
+)
+
+# Generate time series with trend
+@st.composite
+def time_series_with_trend(draw):
+    length = draw(st.integers(min_value=100, max_value=1000))
+    trend = draw(st.floats(min_value=-1, max_value=1))
+    noise = draw(st.floats(min_value=0, max_value=10))
+    
+    return [i * trend + np.random.normal(0, noise) for i in range(length)]
+
+# Generate anomalous data
+@st.composite
+def data_with_anomalies(draw):
+    normal_data = draw(st.lists(st.floats(40, 60), min_size=90, max_size=90))
+    anomaly_count = draw(st.integers(1, 10))
+    anomalies = draw(st.lists(st.floats(90, 100), min_size=anomaly_count, max_size=anomaly_count))
+    
+    return normal_data + anomalies
+```
+
+### Shrinking
+
+Hypothesis automatically shrinks failing examples:
+
+```python
+@given(st.lists(st.floats(0, 100), min_size=100))
+def test_detector_handles_all_data(values):
+    detector = IsolationForestDetector()
+    detector.train(values)  # Should not crash
+    
+# If this fails with a 500-element list, Hypothesis will
+# automatically try to find the smallest failing example
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Property Selection">
+    - Focus on invariants that must always hold
+    - Test boundary conditions
+    - Verify mathematical properties
+    - Check error handling
+  </Accordion>
+  
+  <Accordion title="Test Performance">
+    - Use `@settings(max_examples=100)` for slow tests
+    - Profile property tests to find bottlenecks
+    - Use `@example()` decorator for known edge cases
+    - Cache expensive setup operations
+  </Accordion>
+  
+  <Accordion title="Debugging Failures">
+    - Use `--hypothesis-seed=<seed>` to reproduce failures
+    - Add `print()` statements to see generated data
+    - Use `note()` to log intermediate values
+    - Simplify properties to isolate issues
+  </Accordion>
+</AccordionGroup>
+
+## Example: Full Test Suite
+
+```python
+# tests/property/test_detector_properties.py
+from hypothesis import given, strategies as st, settings
+import numpy as np
+from infraguard.detector import IsolationForestDetector
+
+class TestDetectorProperties:
+    
+    @given(st.lists(st.floats(0, 100), min_size=100, max_size=1000))
+    @settings(max_examples=200)
+    def test_monotonicity(self, values):
+        """Higher anomaly scores for more extreme values"""
+        detector = IsolationForestDetector()
+        detector.train(values)
+        
+        mean = np.mean(values)
+        std = np.std(values)
+        
+        normal = mean
+        extreme = mean + 5 * std
+        
+        normal_score = detector.detect([normal])[0].score
+        extreme_score = detector.detect([extreme])[0].score
+        
+        assert extreme_score > normal_score
+    
+    @given(st.lists(st.floats(0, 100), min_size=100))
+    def test_training_stability(self, values):
+        """Same data produces same model"""
+        d1 = IsolationForestDetector(random_state=42)
+        d2 = IsolationForestDetector(random_state=42)
+        
+        d1.train(values)
+        d2.train(values)
+        
+        test = values[:10]
+        scores1 = [d.score for d in d1.detect(test)]
+        scores2 = [d.score for d in d2.detect(test)]
+        
+        np.testing.assert_array_almost_equal(scores1, scores2)
+    
+    @given(
+        st.lists(st.floats(0, 100), min_size=100),
+        st.floats(0.1, 10)
+    )
+    def test_scale_invariance(self, values, scale):
+        """Scaling preserves relative anomaly scores"""
+        detector = IsolationForestDetector()
+        
+        detector.train(values)
+        scores1 = [d.score for d in detector.detect(values[:10])]
+        
+        scaled = [v * scale for v in values]
+        detector.train(scaled)
+        scores2 = [d.score for d in detector.detect(scaled[:10])]
+        
+        assert np.argsort(scores1).tolist() == np.argsort(scores2).tolist()
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Testing Guide" icon="vial" href="/docs/TESTING.md">
+    Complete testing documentation
+  </Card>
+  
+  <Card title="Performance Tuning" icon="gauge" href="/advanced/performance-tuning">
+    Optimize InfraGuard performance
+  </Card>
+</CardGroup>

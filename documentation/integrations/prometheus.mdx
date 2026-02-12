@@ -1,0 +1,441 @@
+---
+title: 'Prometheus Integration'
+description: 'Configure InfraGuard to collect metrics from Prometheus'
+---
+
+## Overview
+
+InfraGuard queries Prometheus to collect infrastructure metrics for anomaly detection. This guide covers Prometheus setup and configuration.
+
+## Prerequisites
+
+<CardGroup cols={2}>
+  <Card title="Prometheus Instance" icon="chart-line">
+    Version 2.30 or higher
+  </Card>
+  <Card title="Network Access" icon="network-wired">
+    InfraGuard must reach Prometheus API
+  </Card>
+  <Card title="Metrics Available" icon="database">
+    Prometheus scraping target metrics
+  </Card>
+  <Card title="Query Permissions" icon="key">
+    Read access to Prometheus API
+  </Card>
+</CardGroup>
+
+## Configuration
+
+### Basic Setup
+
+Configure Prometheus connection in `settings.yaml`:
+
+```yaml
+prometheus:
+  # Prometheus API URL
+  url: "http://prometheus:9090"
+  
+  # HTTP timeout in seconds
+  timeout_seconds: 30
+  
+  # PromQL queries to execute
+  queries:
+    cpu_utilization: 'rate(node_cpu_seconds_total{mode!="idle"}[5m])'
+    memory_utilization: 'node_memory_Active_bytes / node_memory_MemTotal_bytes'
+    http_error_rate: 'rate(http_requests_total{status=~"5.."}[5m])'
+```
+
+### Kubernetes Service Discovery
+
+If Prometheus is in a different namespace:
+
+```yaml
+prometheus:
+  url: "http://prometheus-server.monitoring.svc.cluster.local:9090"
+```
+
+<Tip>
+  Use the full Kubernetes service DNS name: `<service>.<namespace>.svc.cluster.local`
+</Tip>
+
+### External Prometheus
+
+For Prometheus outside the cluster:
+
+```yaml
+prometheus:
+  url: "https://prometheus.example.com"
+  timeout_seconds: 60  # Increase for external connections
+```
+
+## PromQL Queries
+
+### CPU Metrics
+
+```yaml
+queries:
+  # CPU utilization (excluding idle)
+  cpu_utilization: 'rate(node_cpu_seconds_total{mode!="idle"}[5m])'
+  
+  # CPU by mode
+  cpu_user: 'rate(node_cpu_seconds_total{mode="user"}[5m])'
+  cpu_system: 'rate(node_cpu_seconds_total{mode="system"}[5m])'
+  cpu_iowait: 'rate(node_cpu_seconds_total{mode="iowait"}[5m])'
+```
+
+### Memory Metrics
+
+```yaml
+queries:
+  # Memory utilization percentage
+  memory_utilization: 'node_memory_Active_bytes / node_memory_MemTotal_bytes'
+  
+  # Available memory
+  memory_available: 'node_memory_MemAvailable_bytes'
+  
+  # Memory pressure
+  memory_pressure: '1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)'
+```
+
+### Network Metrics
+
+```yaml
+queries:
+  # Network receive rate
+  network_receive: 'rate(node_network_receive_bytes_total[5m])'
+  
+  # Network transmit rate
+  network_transmit: 'rate(node_network_transmit_bytes_total[5m])'
+  
+  # Network errors
+  network_errors: 'rate(node_network_receive_errs_total[5m]) + rate(node_network_transmit_errs_total[5m])'
+```
+
+### Application Metrics
+
+```yaml
+queries:
+  # HTTP error rate
+  http_error_rate: 'rate(http_requests_total{status=~"5.."}[5m])'
+  
+  # Request latency (p95)
+  http_latency_p95: 'histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))'
+  
+  # Active connections
+  active_connections: 'sum(http_connections_active)'
+```
+
+### Database Metrics
+
+```yaml
+queries:
+  # Query duration
+  db_query_duration: 'rate(mysql_global_status_queries[5m])'
+  
+  # Connection pool usage
+  db_connections: 'mysql_global_status_threads_connected / mysql_global_variables_max_connections'
+  
+  # Slow queries
+  db_slow_queries: 'rate(mysql_global_status_slow_queries[5m])'
+```
+
+## Query Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Rate Functions">
+    Always use `rate()` for counter metrics:
+    
+    ```promql
+    # Good
+    rate(http_requests_total[5m])
+    
+    # Bad (raw counter values)
+    http_requests_total
+    ```
+  </Accordion>
+  
+  <Accordion title="Choose Appropriate Time Windows">
+    **5-minute window**: Good for most metrics
+    ```promql
+    rate(metric[5m])
+    ```
+    
+    **1-minute window**: For fast-changing metrics
+    ```promql
+    rate(metric[1m])
+    ```
+    
+    **15-minute window**: For slow-changing metrics
+    ```promql
+    rate(metric[15m])
+    ```
+  </Accordion>
+  
+  <Accordion title="Filter by Labels">
+    Use labels to focus on specific instances:
+    
+    ```promql
+    # Specific instance
+    rate(http_requests_total{instance="web-1"}[5m])
+    
+    # Specific environment
+    rate(http_requests_total{env="production"}[5m])
+    
+    # Multiple conditions
+    rate(http_requests_total{env="production",service="api"}[5m])
+    ```
+  </Accordion>
+  
+  <Accordion title="Aggregate Across Instances">
+    Use aggregation functions for cluster-wide metrics:
+    
+    ```promql
+    # Sum across all instances
+    sum(rate(http_requests_total[5m]))
+    
+    # Average across instances
+    avg(rate(cpu_usage[5m]))
+    
+    # Max across instances
+    max(memory_usage_bytes)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Testing Queries
+
+### Test in Prometheus UI
+
+1. Open Prometheus UI: `http://prometheus:9090`
+2. Navigate to **Graph** tab
+3. Enter your PromQL query
+4. Click **Execute**
+5. Verify results in table or graph view
+
+### Test with curl
+
+```bash
+# Test instant query
+curl 'http://prometheus:9090/api/v1/query?query=up'
+
+# Test range query
+curl 'http://prometheus:9090/api/v1/query_range?query=up&start=2026-04-06T10:00:00Z&end=2026-04-06T11:00:00Z&step=1m'
+```
+
+### Test with InfraGuard
+
+```python
+from src.collector.prometheus import PrometheusCollector
+
+collector = PrometheusCollector({
+    'url': 'http://prometheus:9090',
+    'queries': {
+        'test': 'up'
+    }
+})
+
+result = collector.execute_query('up')
+print(result)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection refused">
+    **Cause**: InfraGuard cannot reach Prometheus
+    
+    **Solution**:
+    ```bash
+    # Test connectivity
+    curl http://prometheus:9090/-/healthy
+    
+    # Check network policies (Kubernetes)
+    kubectl get networkpolicies -n infraguard
+    
+    # Verify service exists
+    kubectl get svc -n monitoring
+    ```
+  </Accordion>
+  
+  <Accordion title="Query returns no data">
+    **Cause**: Metric doesn't exist or wrong time range
+    
+    **Solution**:
+    ```bash
+    # List all metrics
+    curl http://prometheus:9090/api/v1/label/__name__/values
+    
+    # Check metric exists
+    curl 'http://prometheus:9090/api/v1/query?query=metric_name'
+    
+    # Verify scrape targets
+    curl http://prometheus:9090/api/v1/targets
+    ```
+  </Accordion>
+  
+  <Accordion title="Query timeout">
+    **Cause**: Query too complex or large time range
+    
+    **Solution**:
+    ```yaml
+    prometheus:
+      timeout_seconds: 60  # Increase timeout
+    
+    queries:
+      # Simplify query
+      metric: 'rate(metric[5m])'  # Instead of [1h]
+    ```
+  </Accordion>
+  
+  <Accordion title="Authentication required">
+    **Cause**: Prometheus requires authentication
+    
+    **Solution**:
+    ```python
+    # Add authentication to collector
+    collector = PrometheusCollector({
+        'url': 'http://prometheus:9090',
+        'auth': ('username', 'password'),  # Basic auth
+        'queries': {...}
+    })
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Optimization
+
+### Query Optimization
+
+<CardGroup cols={2}>
+  <Card title="Use Recording Rules" icon="bolt">
+    Pre-compute expensive queries in Prometheus
+  </Card>
+  <Card title="Limit Cardinality" icon="filter">
+    Filter by labels to reduce data volume
+  </Card>
+  <Card title="Appropriate Windows" icon="clock">
+    Use smallest time window that captures patterns
+  </Card>
+  <Card title="Avoid Wildcards" icon="ban">
+    Be specific with label matchers
+  </Card>
+</CardGroup>
+
+### Recording Rules Example
+
+Create recording rules in Prometheus:
+
+```yaml
+# prometheus-rules.yaml
+groups:
+  - name: infraguard
+    interval: 1m
+    rules:
+      # Pre-compute CPU utilization
+      - record: infraguard:cpu_utilization
+        expr: rate(node_cpu_seconds_total{mode!="idle"}[5m])
+      
+      # Pre-compute memory utilization
+      - record: infraguard:memory_utilization
+        expr: node_memory_Active_bytes / node_memory_MemTotal_bytes
+```
+
+Then use in InfraGuard:
+
+```yaml
+queries:
+  cpu_utilization: 'infraguard:cpu_utilization'
+  memory_utilization: 'infraguard:memory_utilization'
+```
+
+## Advanced Configuration
+
+### Multiple Prometheus Instances
+
+Monitor multiple Prometheus instances:
+
+```yaml
+prometheus_instances:
+  - name: "production"
+    url: "http://prometheus-prod:9090"
+    queries:
+      cpu: 'rate(node_cpu_seconds_total{mode!="idle"}[5m])'
+  
+  - name: "staging"
+    url: "http://prometheus-staging:9090"
+    queries:
+      cpu: 'rate(node_cpu_seconds_total{mode!="idle"}[5m])'
+```
+
+### Custom Headers
+
+Add custom HTTP headers:
+
+```python
+collector = PrometheusCollector({
+    'url': 'http://prometheus:9090',
+    'headers': {
+        'X-Custom-Header': 'value',
+        'Authorization': 'Bearer token'
+    },
+    'queries': {...}
+})
+```
+
+### TLS Configuration
+
+Connect to Prometheus over HTTPS:
+
+```yaml
+prometheus:
+  url: "https://prometheus.example.com"
+  tls:
+    verify: true
+    ca_cert: "/path/to/ca.crt"
+    client_cert: "/path/to/client.crt"
+    client_key: "/path/to/client.key"
+```
+
+## Monitoring
+
+Track Prometheus query performance:
+
+```python
+# Prometheus metrics exposed by InfraGuard
+prometheus_queries_total = Counter('infraguard_prometheus_queries_total')
+prometheus_query_duration_seconds = Histogram('infraguard_prometheus_query_duration_seconds')
+prometheus_query_errors_total = Counter('infraguard_prometheus_query_errors_total')
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Slack Integration"
+    icon="slack"
+    href="/integrations/slack"
+  >
+    Configure Slack notifications
+  </Card>
+  <Card
+    title="Jira Integration"
+    icon="ticket"
+    href="/integrations/jira"
+  >
+    Set up Jira ticket creation
+  </Card>
+  <Card
+    title="Custom Metrics"
+    icon="chart-line"
+    href="/guides/custom-metrics"
+  >
+    Add custom PromQL queries
+  </Card>
+  <Card
+    title="Troubleshooting"
+    icon="wrench"
+    href="/guides/troubleshooting"
+  >
+    Resolve common issues
+  </Card>
+</CardGroup>

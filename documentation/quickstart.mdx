@@ -1,0 +1,282 @@
+---
+title: 'Quickstart'
+description: 'Get InfraGuard up and running in 5 minutes'
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+<CardGroup cols={2}>
+  <Card title="Docker" icon="docker">
+    Version 20.10 or higher
+  </Card>
+  <Card title="Docker Compose" icon="layer-group">
+    Version 1.29 or higher
+  </Card>
+</CardGroup>
+
+<Note>
+  For production deployments, you'll also need Kubernetes 1.21+ and kubectl CLI.
+</Note>
+
+## Step 1: Clone the Repository
+
+```bash
+git clone https://github.com/your-org/infraguard.git
+cd infraguard
+```
+
+## Step 2: Configure Environment Variables
+
+Create a `.env` file with your credentials:
+
+```bash .env
+# Jira Configuration
+JIRA_API_TOKEN=your-jira-api-token
+
+# Slack Configuration
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+```
+
+<Warning>
+  Never commit your `.env` file to version control. Add it to `.gitignore`.
+</Warning>
+
+## Step 3: Start the Development Environment
+
+Launch InfraGuard with Docker Compose:
+
+```bash
+docker-compose up -d
+```
+
+This starts:
+- **Prometheus** (port 9090) - Metrics database
+- **Dummy App** (port 8080) - Generates test metrics
+- **InfraGuard** - Monitoring and detection
+- **Grafana** (port 3000) - Visualization dashboard
+
+<Check>
+  Wait 30 seconds for all services to initialize
+</Check>
+
+## Step 4: Verify Installation
+
+### Check Service Status
+
+```bash
+docker-compose ps
+```
+
+All services should show status `Up`.
+
+### Access Prometheus
+
+Open [http://localhost:9090](http://localhost:9090) in your browser.
+
+<Steps>
+  <Step title="Navigate to Targets">
+    Go to Status → Targets
+  </Step>
+  <Step title="Verify Scraping">
+    Confirm the dummy app target shows as "UP"
+  </Step>
+</Steps>
+
+### Access Grafana
+
+Open [http://localhost:3000](http://localhost:3000) (admin/admin).
+
+<Steps>
+  <Step title="Login">
+    Use default credentials: admin/admin
+  </Step>
+  <Step title="View Dashboard">
+    Navigate to Dashboards → InfraGuard
+  </Step>
+  <Step title="Verify Metrics">
+    Confirm metrics are being displayed
+  </Step>
+</Steps>
+
+## Step 5: View InfraGuard Logs
+
+Monitor InfraGuard's detection activity:
+
+```bash
+docker logs -f infraguard-app
+```
+
+You should see output like:
+
+```
+2026-04-06 10:30:00 - INFO - Starting InfraGuard...
+2026-04-06 10:30:01 - INFO - Loaded pre-trained ML model
+2026-04-06 10:30:02 - INFO - Starting collection cycle
+2026-04-06 10:31:00 - INFO - Collected 3 metrics from Prometheus
+2026-04-06 10:31:01 - INFO - No anomalies detected
+```
+
+## Step 6: Trigger a Test Anomaly
+
+The dummy app periodically generates anomalies. To manually trigger one:
+
+```bash
+curl -X POST http://localhost:8080/spike
+```
+
+Watch the InfraGuard logs for anomaly detection:
+
+```
+2026-04-06 10:32:00 - WARNING - Anomaly detected! Confidence: 95.2%
+2026-04-06 10:32:01 - INFO - Jira ticket created: INC-1045
+2026-04-06 10:32:02 - INFO - Slack alert sent successfully
+```
+
+<Check>
+  Check your Slack channel for the alert notification!
+</Check>
+
+## Step 7: Explore the Dashboard
+
+Open Grafana and explore the InfraGuard dashboard:
+
+<CardGroup cols={2}>
+  <Card title="Metrics Panel" icon="chart-line">
+    View CPU, memory, and error rate trends
+  </Card>
+  <Card title="Anomalies Panel" icon="triangle-exclamation">
+    See detected anomalies with confidence scores
+  </Card>
+  <Card title="Alerts Panel" icon="bell">
+    Monitor alert delivery status
+  </Card>
+  <Card title="Filters" icon="filter">
+    Filter by metric type and time range
+  </Card>
+</CardGroup>
+
+## Configuration
+
+### Customize Metrics
+
+Edit `src/config/settings.yaml` to add custom PromQL queries:
+
+```yaml src/config/settings.yaml
+prometheus:
+  queries:
+    cpu_utilization: 'rate(node_cpu_seconds_total{mode!="idle"}[5m])'
+    memory_utilization: 'node_memory_Active_bytes / node_memory_MemTotal_bytes'
+    custom_metric: 'your_custom_promql_query'
+```
+
+### Adjust Detection Sensitivity
+
+Modify the confidence threshold:
+
+```yaml src/config/settings.yaml
+ml:
+  confidence_threshold: 85.0  # Lower = more sensitive (more alerts)
+```
+
+<Tip>
+  Start with 85% and adjust based on your alert volume
+</Tip>
+
+### Configure Runbooks
+
+Map metrics to runbook URLs:
+
+```yaml src/config/settings.yaml
+alerting:
+  runbooks:
+    cpu_utilization:
+      anomaly: "https://wiki.internal/runbooks/cpu-spike"
+    memory_utilization:
+      anomaly: "https://wiki.internal/runbooks/memory-leak"
+    default: "https://wiki.internal/runbooks/general"
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Train Custom Models"
+    icon="graduation-cap"
+    href="/guides/training-models"
+  >
+    Train InfraGuard on your historical data
+  </Card>
+  <Card
+    title="Deploy to Kubernetes"
+    icon="dharmachakra"
+    href="/deployment/kubernetes"
+  >
+    Deploy InfraGuard to production
+  </Card>
+  <Card
+    title="Configure Integrations"
+    icon="plug"
+    href="/integrations/prometheus"
+  >
+    Set up Prometheus, Slack, and Jira
+  </Card>
+  <Card
+    title="Troubleshooting"
+    icon="wrench"
+    href="/guides/troubleshooting"
+  >
+    Resolve common issues
+  </Card>
+</CardGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Prometheus not scraping metrics">
+    **Solution**: Check that the dummy app is running and exposing metrics on port 8080:
+    ```bash
+    curl http://localhost:8080/metrics
+    ```
+  </Accordion>
+  
+  <Accordion title="No anomalies detected">
+    **Solution**: The dummy app generates anomalies randomly. Manually trigger one:
+    ```bash
+    curl -X POST http://localhost:8080/spike
+    ```
+  </Accordion>
+  
+  <Accordion title="Slack alerts not received">
+    **Solution**: Verify your webhook URL in `.env` and check InfraGuard logs for errors:
+    ```bash
+    docker logs infraguard-app | grep Slack
+    ```
+  </Accordion>
+  
+  <Accordion title="Jira tickets not created">
+    **Solution**: Verify your Jira credentials and API token:
+    ```bash
+    docker logs infraguard-app | grep Jira
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Cleanup
+
+To stop and remove all containers:
+
+```bash
+docker-compose down
+```
+
+To also remove volumes (including Prometheus data):
+
+```bash
+docker-compose down -v
+```
+
+<Warning>
+  This will delete all collected metrics and trained models
+</Warning>

@@ -1,0 +1,600 @@
+---
+title: 'Training Models'
+description: 'Train custom ML models on your infrastructure data'
+---
+
+## Overview
+
+InfraGuard uses machine learning models that need to be trained on your infrastructure's historical data to learn normal behavior patterns. This guide walks you through the training process.
+
+## Why Train Custom Models?
+
+<CardGroup cols={2}>
+  <Card title="Your Patterns" icon="fingerprint">
+    Every infrastructure has unique normal patterns
+  </Card>
+  <Card title="Better Accuracy" icon="bullseye">
+    Models trained on your data detect anomalies more accurately
+  </Card>
+  <Card title="Fewer False Positives" icon="check">
+    Reduces alerts for patterns that are normal in your environment
+  </Card>
+  <Card title="Adaptive" icon="arrows-rotate">
+    Retrain periodically to adapt to changing patterns
+  </Card>
+</CardGroup>
+
+## Prerequisites
+
+<Steps>
+  <Step title="Historical Data">
+    At least 7 days of metrics in Prometheus
+  </Step>
+  <Step title="Python Environment">
+    Python 3.9+ with InfraGuard dependencies installed
+  </Step>
+  <Step title="Prometheus Access">
+    Network access to your Prometheus instance
+  </Step>
+  <Step title="Storage Space">
+    ~100MB for training data, ~5MB for model file
+  </Step>
+</Steps>
+
+## Training Process
+
+### Step 1: Prepare Configuration
+
+Create a training configuration file:
+
+```yaml training_config.yaml
+# Prometheus connection
+prometheus:
+  url: "http://prometheus:9090"
+  timeout_seconds: 30
+
+# Metrics to train on
+metrics:
+  cpu_utilization: 'rate(node_cpu_seconds_total{mode!="idle"}[5m])'
+  memory_utilization: 'node_memory_Active_bytes / node_memory_MemTotal_bytes'
+  http_error_rate: 'rate(http_requests_total{status=~"5.."}[5m])'
+
+# Training parameters
+training:
+  # Time range for historical data
+  start_date: "2026-03-30"  # 7 days ago
+  end_date: "2026-04-06"    # Today
+  
+  # Model parameters
+  contamination: 0.1          # Expected % of anomalies
+  n_estimators: 100           # Number of trees
+  max_samples: 256            # Samples per tree
+  random_state: 42            # For reproducibility
+  
+  # Output
+  output_path: "models/pretrained/isolation_forest.pkl"
+```
+
+### Step 2: Run Training Script
+
+Use the provided training script:
+
+```bash
+python scripts/train_model.py --config training_config.yaml
+```
+
+Or run programmatically:
+
+```python
+from datetime import datetime, timedelta
+from src.collector.prometheus import PrometheusCollector
+from src.collector.formatter import DataFormatter
+from src.ml.isolation_forest import IsolationForestDetector
+import yaml
+
+# Load configuration
+with open('training_config.yaml') as f:
+    config = yaml.safe_load(f)
+
+# Initialize components
+collector = PrometheusCollector(config['prometheus'])
+formatter = DataFormatter()
+detector = IsolationForestDetector(config['training'])
+
+# Collect historical data
+print("Collecting historical data...")
+start_time = datetime.fromisoformat(config['training']['start_date'])
+end_time = datetime.fromisoformat(config['training']['end_date'])
+
+historical_data = []
+for metric_name, query in config['metrics'].items():
+    print(f"Querying {metric_name}...")
+    data = collector.query_range(
+        query=query,
+        start=start_time,
+        end=end_time,
+        step='1m'
+    )
+    historical_data.append(data)
+
+# Combine all metrics
+combined_data = pd.concat(historical_data)
+print(f"Collected {len(combined_data)} data points")
+
+# Format and add features
+print("Adding features...")
+training_data = formatter.add_feature_columns(combined_data)
+
+# Train model
+print("Training Isolation Forest model...")
+detector.train(training_data)
+
+# Save model
+output_path = config['training']['output_path']
+detector.save_model(output_path)
+print(f"Model saved to {output_path}")
+
+# Evaluate model
+print("\nModel Evaluation:")
+print(f"  Training samples: {len(training_data)}")
+print(f"  Features: {training_data.shape[1]}")
+print(f"  Contamination: {config['training']['contamination']}")
+print(f"  N estimators: {config['training']['n_estimators']}")
+```
+
+### Step 3: Validate Model
+
+Test the trained model on recent data:
+
+```python
+# Load trained model
+detector.load_model(output_path)
+
+# Collect recent data (last hour)
+recent_data = collector.collect_metrics()
+formatted_data = formatter.add_feature_columns(recent_data)
+
+# Detect anomalies
+result = detector.detect_anomalies(formatted_data)
+
+print(f"\nValidation Results:")
+print(f"  Total points: {len(formatted_data)}")
+print(f"  Anomalies detected: {len(result.anomalous_points)}")
+print(f"  Anomaly rate: {len(result.anomalous_points) / len(formatted_data) * 100:.2f}%")
+
+if result.is_anomaly:
+    print(f"  Confidence: {result.confidence:.1f}%")
+    print(f"\nAnomalous points:")
+    print(result.anomalous_points[['timestamp', 'metric_name', 'value', 'anomaly_score']])
+```
+
+<Check>
+  **Expected Results:**
+  - Anomaly rate: 5-15% (depending on contamination parameter)
+  - Confidence: 70-100% for detected anomalies
+  - No anomalies during known normal periods
+</Check>
+
+## Training Script
+
+Create a reusable training script:
+
+```python scripts/train_model.py
+#!/usr/bin/env python3
+"""
+InfraGuard Model Training Script
+
+Usage:
+    python scripts/train_model.py --config training_config.yaml
+    python scripts/train_model.py --start-date 2026-03-30 --end-date 2026-04-06
+"""
+
+import argparse
+import yaml
+import pandas as pd
+from datetime import datetime, timedelta
+from src.collector.prometheus import PrometheusCollector
+from src.collector.formatter import DataFormatter
+from src.ml.isolation_forest import IsolationForestDetector
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train InfraGuard ML model')
+    parser.add_argument('--config', type=str, help='Path to training config file')
+    parser.add_argument('--start-date', type=str, help='Start date (YYYY-MM-DD)')
+    parser.add_argument('--end-date', type=str, help='End date (YYYY-MM-DD)')
+    parser.add_argument('--output', type=str, default='models/pretrained/isolation_forest.pkl',
+                        help='Output path for trained model')
+    return parser.parse_args()
+
+def load_config(config_path):
+    with open(config_path) as f:
+        return yaml.safe_load(f)
+
+def collect_training_data(collector, queries, start_time, end_time):
+    """Collect historical data for all metrics."""
+    all_data = []
+    
+    for metric_name, query in queries.items():
+        print(f"Collecting {metric_name}...")
+        try:
+            data = collector.query_range(
+                query=query,
+                start=start_time,
+                end=end_time,
+                step='1m'
+            )
+            data['metric_name'] = metric_name
+            all_data.append(data)
+            print(f"  Collected {len(data)} points")
+        except Exception as e:
+            print(f"  Error: {e}")
+    
+    return pd.concat(all_data) if all_data else pd.DataFrame()
+
+def main():
+    args = parse_args()
+    
+    # Load configuration
+    if args.config:
+        config = load_config(args.config)
+        start_date = config['training']['start_date']
+        end_date = config['training']['end_date']
+        output_path = config['training']['output_path']
+    else:
+        config = {
+            'prometheus': {'url': 'http://prometheus:9090'},
+            'metrics': {
+                'cpu': 'rate(node_cpu_seconds_total{mode!="idle"}[5m])'
+            },
+            'training': {
+                'contamination': 0.1,
+                'n_estimators': 100,
+                'max_samples': 256,
+                'random_state': 42
+            }
+        }
+        start_date = args.start_date
+        end_date = args.end_date
+        output_path = args.output
+    
+    # Parse dates
+    start_time = datetime.fromisoformat(start_date)
+    end_time = datetime.fromisoformat(end_date)
+    
+    print(f"Training InfraGuard Model")
+    print(f"  Start: {start_time}")
+    print(f"  End: {end_time}")
+    print(f"  Duration: {(end_time - start_time).days} days")
+    print()
+    
+    # Initialize components
+    collector = PrometheusCollector(config['prometheus'])
+    formatter = DataFormatter()
+    detector = IsolationForestDetector(config['training'])
+    
+    # Collect data
+    print("Collecting historical data...")
+    historical_data = collect_training_data(
+        collector,
+        config['metrics'],
+        start_time,
+        end_time
+    )
+    
+    if historical_data.empty:
+        print("Error: No data collected. Check Prometheus connection and queries.")
+        return 1
+    
+    print(f"\nCollected {len(historical_data)} total data points")
+    
+    # Format data
+    print("Adding features...")
+    training_data = formatter.add_feature_columns(historical_data)
+    
+    # Remove NaN values from rolling calculations
+    training_data = training_data.dropna()
+    print(f"Training data: {len(training_data)} points after cleaning")
+    
+    # Train model
+    print("\nTraining Isolation Forest model...")
+    detector.train(training_data)
+    
+    # Save model
+    print(f"Saving model to {output_path}...")
+    detector.save_model(output_path)
+    
+    # Print summary
+    print("\n" + "="*50)
+    print("Training Complete!")
+    print("="*50)
+    print(f"Model saved to: {output_path}")
+    print(f"Training samples: {len(training_data)}")
+    print(f"Features: {training_data.shape[1]}")
+    print(f"Contamination: {config['training']['contamination']}")
+    print(f"N estimators: {config['training']['n_estimators']}")
+    print("\nNext steps:")
+    print("  1. Validate the model on recent data")
+    print("  2. Deploy to InfraGuard")
+    print("  3. Monitor alert volume and accuracy")
+    
+    return 0
+
+if __name__ == '__main__':
+    exit(main())
+```
+
+Make it executable:
+
+```bash
+chmod +x scripts/train_model.py
+```
+
+## Automated Retraining
+
+### Kubernetes CronJob
+
+Schedule weekly retraining:
+
+```yaml k8s/cronjob-training.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: infraguard-training
+  namespace: infraguard
+spec:
+  # Run every Sunday at 2 AM
+  schedule: "0 2 * * 0"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: training
+            image: your-registry/infraguard:latest
+            command:
+            - python
+            - scripts/train_model.py
+            - --start-date
+            - $(date -d '7 days ago' +%Y-%m-%d)
+            - --end-date
+            - $(date +%Y-%m-%d)
+            - --output
+            - /models/isolation_forest.pkl
+            volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: config
+              mountPath: /app/config
+          volumes:
+          - name: models
+            persistentVolumeClaim:
+              claimName: infraguard-models
+          - name: config
+            configMap:
+              name: infraguard-config
+          restartPolicy: OnFailure
+```
+
+Apply the CronJob:
+
+```bash
+kubectl apply -f k8s/cronjob-training.yaml
+```
+
+### GitHub Actions
+
+Automate training in CI/CD:
+
+```yaml .github/workflows/train-model.yml
+name: Train InfraGuard Model
+
+on:
+  schedule:
+    # Run every Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Train model
+        env:
+          PROMETHEUS_URL: ${{ secrets.PROMETHEUS_URL }}
+        run: |
+          python scripts/train_model.py \
+            --start-date $(date -d '7 days ago' +%Y-%m-%d) \
+            --end-date $(date +%Y-%m-%d) \
+            --output models/isolation_forest.pkl
+      
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: trained-model
+          path: models/isolation_forest.pkl
+      
+      - name: Deploy to production
+        run: |
+          # Copy model to production storage
+          aws s3 cp models/isolation_forest.pkl \
+            s3://infraguard-models/isolation_forest.pkl
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Training Data Duration">
+    **Recommendation**: 7-14 days of historical data
+    
+    **Why**:
+    - Too short (< 3 days): Misses weekly patterns
+    - Too long (> 30 days): Includes outdated patterns
+    
+    **Exception**: Include at least one full business cycle (week)
+  </Accordion>
+  
+  <Accordion title="Retraining Frequency">
+    **Recommendation**: Weekly or monthly
+    
+    **Why**:
+    - Infrastructure patterns change over time
+    - New services, traffic growth, code changes
+    
+    **Trigger retraining when**:
+    - Alert volume increases significantly
+    - Major infrastructure changes
+    - False positive rate > 15%
+  </Accordion>
+  
+  <Accordion title="Data Quality">
+    **Check for**:
+    - Missing data (gaps in time series)
+    - Outliers during known incidents
+    - Maintenance windows
+    
+    **Solution**:
+    - Fill gaps with interpolation
+    - Exclude known incident periods
+    - Filter out maintenance windows
+  </Accordion>
+  
+  <Accordion title="Model Validation">
+    **Always validate before deployment**:
+    1. Test on recent data (last 24 hours)
+    2. Check anomaly rate (should be 5-15%)
+    3. Verify no anomalies during normal periods
+    4. Test on known anomalies (if available)
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No data collected">
+    **Cause**: Prometheus connection or query issues
+    
+    **Solution**:
+    ```bash
+    # Test Prometheus connection
+    curl http://prometheus:9090/-/healthy
+    
+    # Test query manually
+    curl 'http://prometheus:9090/api/v1/query?query=up'
+    ```
+  </Accordion>
+  
+  <Accordion title="Training fails with memory error">
+    **Cause**: Too much training data
+    
+    **Solution**:
+    - Reduce time range (use 7 days instead of 14)
+    - Reduce max_samples parameter
+    - Increase available memory
+    
+    ```yaml
+    training:
+      max_samples: 128  # Reduce from 256
+    ```
+  </Accordion>
+  
+  <Accordion title="Model detects too many anomalies">
+    **Cause**: Contamination parameter too high
+    
+    **Solution**:
+    ```yaml
+    training:
+      contamination: 0.05  # Reduce from 0.1
+    ```
+  </Accordion>
+  
+  <Accordion title="Model misses obvious anomalies">
+    **Cause**: Contamination parameter too low or insufficient features
+    
+    **Solution**:
+    ```yaml
+    training:
+      contamination: 0.15  # Increase from 0.1
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Topics
+
+### Multi-Metric Training
+
+Train separate models for different metric types:
+
+```python
+# Train CPU model
+cpu_data = historical_data[historical_data['metric_name'] == 'cpu_utilization']
+cpu_detector = IsolationForestDetector(config)
+cpu_detector.train(cpu_data)
+cpu_detector.save_model('models/cpu_model.pkl')
+
+# Train memory model
+memory_data = historical_data[historical_data['metric_name'] == 'memory_utilization']
+memory_detector = IsolationForestDetector(config)
+memory_detector.train(memory_data)
+memory_detector.save_model('models/memory_model.pkl')
+```
+
+### Ensemble Models
+
+Combine multiple models for better accuracy:
+
+```python
+from sklearn.ensemble import VotingClassifier
+
+# Create ensemble
+ensemble = VotingClassifier(
+    estimators=[
+        ('isolation_forest', isolation_forest_model),
+        ('one_class_svm', one_class_svm_model),
+        ('local_outlier_factor', lof_model)
+    ],
+    voting='soft'
+)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Anomaly Detection"
+    icon="magnifying-glass"
+    href="/concepts/anomaly-detection"
+  >
+    Understand how detection works
+  </Card>
+  <Card
+    title="Performance Tuning"
+    icon="gauge"
+    href="/advanced/performance-tuning"
+  >
+    Optimize model performance
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api-reference/detector"
+  >
+    Explore the ML Detector API
+  </Card>
+  <Card
+    title="Troubleshooting"
+    icon="wrench"
+    href="/guides/troubleshooting"
+  >
+    Resolve common issues
+  </Card>
+</CardGroup>

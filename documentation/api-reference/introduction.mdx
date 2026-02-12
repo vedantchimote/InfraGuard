@@ -1,0 +1,315 @@
+---
+title: 'API Reference'
+description: 'Complete API documentation for InfraGuard components'
+---
+
+## Overview
+
+InfraGuard provides a modular Python API for building custom monitoring solutions. This reference documents all public classes, methods, and interfaces.
+
+## Core Components
+
+<CardGroup cols={2}>
+  <Card
+    title="Metrics Collector"
+    icon="database"
+    href="/api-reference/collector"
+  >
+    Query Prometheus and format time-series data
+  </Card>
+  <Card
+    title="ML Detector"
+    icon="brain"
+    href="/api-reference/detector"
+  >
+    Detect anomalies using Isolation Forest
+  </Card>
+  <Card
+    title="Forecaster"
+    icon="chart-line"
+    href="/api-reference/forecaster"
+  >
+    Predict future metric values with Prophet
+  </Card>
+  <Card
+    title="Alert Manager"
+    icon="bell"
+    href="/api-reference/alerter"
+  >
+    Route alerts to Slack and Jira
+  </Card>
+</CardGroup>
+
+## Quick Example
+
+Here's a complete example of using InfraGuard's API:
+
+```python
+from src.config.settings import ConfigurationManager
+from src.collector.prometheus import PrometheusCollector
+from src.collector.formatter import DataFormatter
+from src.ml.isolation_forest import IsolationForestDetector
+from src.alerter.alert_manager import AlertManager
+
+# 1. Load configuration
+config = ConfigurationManager('config/settings.yaml')
+
+# 2. Initialize components
+collector = PrometheusCollector(config.get_prometheus_config())
+formatter = DataFormatter()
+detector = IsolationForestDetector(config.get_ml_config())
+alert_manager = AlertManager(config.get_alerting_config())
+
+# 3. Load pre-trained model
+detector.load_model()
+
+# 4. Collect and format metrics
+raw_metrics = collector.collect_metrics()
+formatted_metrics = formatter.add_feature_columns(raw_metrics)
+
+# 5. Detect anomalies
+anomaly_result = detector.detect_anomalies(formatted_metrics)
+
+# 6. Send alerts if needed
+if anomaly_result.is_anomaly and anomaly_result.confidence >= 85.0:
+    for metric_name in anomaly_result.anomalous_points['metric_name'].unique():
+        status = alert_manager.send_alert(anomaly_result, metric_name)
+        print(f"Alert sent: {status.to_dict()}")
+```
+
+## Installation
+
+Install InfraGuard as a Python package:
+
+```bash
+pip install infraguard
+```
+
+Or install from source:
+
+```bash
+git clone https://github.com/your-org/infraguard.git
+cd infraguard
+pip install -e .
+```
+
+## Authentication
+
+### Prometheus
+
+No authentication required for Prometheus API (uses HTTP).
+
+### Slack
+
+Requires webhook URL:
+
+```python
+config = {
+    'slack': {
+        'webhook_url': 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL',
+        'channel': '#ops-alerts'
+    }
+}
+```
+
+### Jira
+
+Requires API token:
+
+```python
+config = {
+    'jira': {
+        'api_url': 'https://your-company.atlassian.net',
+        'project_key': 'INC',
+        'username': 'user@company.com',
+        'api_token': 'your-api-token'
+    }
+}
+```
+
+## Error Handling
+
+All components raise specific exceptions for error conditions:
+
+```python
+from src.collector.prometheus import PrometheusConnectionError, PrometheusQueryError
+from src.ml.isolation_forest import ModelLoadError
+from src.alerter.jira import JiraAPIError
+
+try:
+    metrics = collector.collect_metrics()
+except PrometheusConnectionError as e:
+    print(f"Cannot connect to Prometheus: {e}")
+except PrometheusQueryError as e:
+    print(f"Query failed: {e}")
+
+try:
+    detector.load_model()
+except ModelLoadError as e:
+    print(f"Model loading failed: {e}")
+    # Train new model or use default
+```
+
+## Data Models
+
+### MetricPoint
+
+Represents a single metric data point:
+
+```python
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Dict, Optional
+
+@dataclass
+class MetricPoint:
+    timestamp: datetime
+    metric_name: str
+    value: float
+    instance: str
+    labels: Dict[str, str]
+    rolling_mean_5m: Optional[float] = None
+    rolling_std_5m: Optional[float] = None
+    rate_of_change: Optional[float] = None
+    hour_of_day: Optional[int] = None
+    day_of_week: Optional[int] = None
+```
+
+### AnomalyResult
+
+Result from anomaly detection:
+
+```python
+@dataclass
+class AnomalyResult:
+    is_anomaly: bool              # Whether anomalies were detected
+    confidence: float             # Confidence percentage (0-100)
+    scores: np.ndarray           # Raw anomaly scores
+    anomalous_points: pd.DataFrame  # Anomalous data points
+    metadata: dict               # Additional context
+```
+
+### AlertStatus
+
+Status of alert delivery:
+
+```python
+@dataclass
+class AlertStatus:
+    slack_success: bool = False
+    jira_success: bool = False
+    jira_ticket_id: Optional[str] = None
+    errors: list = field(default_factory=list)
+```
+
+## Configuration Schema
+
+Complete configuration structure:
+
+```yaml
+# Prometheus connection
+prometheus:
+  url: string                    # Required
+  timeout_seconds: integer       # Optional (default: 30)
+  queries:
+    metric_name: string          # PromQL query
+
+# Machine Learning
+ml:
+  model_path: string             # Required
+  confidence_threshold: float    # Optional (default: 85.0)
+  contamination: float           # Optional (default: 0.1)
+  n_estimators: integer          # Optional (default: 100)
+
+# Alerting
+alerting:
+  slack:
+    webhook_url: string
+    channel: string
+  jira:
+    api_url: string
+    project_key: string
+    username: string
+    api_token: string
+  runbooks:
+    metric_name:
+      anomaly: string            # Runbook URL
+```
+
+## Rate Limits
+
+### Prometheus
+
+- No built-in rate limits
+- Recommended: 1 query per minute per metric
+- Configure via `collection_interval_seconds`
+
+### Slack
+
+- Webhook rate limit: 1 message per second
+- InfraGuard implements automatic retry with backoff
+
+### Jira
+
+- REST API rate limit: 10 requests per second
+- InfraGuard respects rate limits automatically
+
+## Versioning
+
+InfraGuard follows semantic versioning (SemVer):
+
+- **Major**: Breaking API changes
+- **Minor**: New features, backward compatible
+- **Patch**: Bug fixes, backward compatible
+
+Current version: `1.0.0`
+
+## Support
+
+<CardGroup cols={2}>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/your-org/infraguard/issues">
+    Report bugs and request features
+  </Card>
+  <Card title="Slack Community" icon="slack" href="https://slack.infraguard.io">
+    Get help from the community
+  </Card>
+  <Card title="Email Support" icon="envelope" href="mailto:support@infraguard.io">
+    Contact the support team
+  </Card>
+  <Card title="Documentation" icon="book" href="/">
+    Browse the full documentation
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Metrics Collector API"
+    icon="database"
+    href="/api-reference/collector"
+  >
+    Learn about the Prometheus collector
+  </Card>
+  <Card
+    title="ML Detector API"
+    icon="brain"
+    href="/api-reference/detector"
+  >
+    Explore anomaly detection methods
+  </Card>
+  <Card
+    title="Forecaster API"
+    icon="chart-line"
+    href="/api-reference/forecaster"
+  >
+    Understand time-series forecasting
+  </Card>
+  <Card
+    title="Alert Manager API"
+    icon="bell"
+    href="/api-reference/alerter"
+  >
+    Configure alert routing
+  </Card>
+</CardGroup>

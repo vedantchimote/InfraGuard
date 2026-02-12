@@ -1,0 +1,478 @@
+---
+title: 'Troubleshooting Guide'
+description: 'Common issues and solutions for InfraGuard'
+icon: 'wrench'
+---
+
+## Overview
+
+This guide covers common issues you might encounter with InfraGuard and how to resolve them.
+
+## Quick Diagnostics
+
+Run these commands to check system health:
+
+```bash
+# Check InfraGuard health
+curl http://localhost:8000/health
+
+# Check logs
+docker logs infraguard --tail=100
+
+# Check resource usage
+docker stats infraguard
+
+# Verify configuration
+infraguard config validate
+```
+
+## Common Issues
+
+### Installation & Deployment
+
+<AccordionGroup>
+  <Accordion title="Container Won't Start">
+    **Symptoms**: Container exits immediately or fails to start
+    
+    **Diagnosis**:
+    ```bash
+    # Check container logs
+    docker logs infraguard
+    
+    # Check container status
+    docker ps -a | grep infraguard
+    
+    # Inspect container
+    docker inspect infraguard
+    ```
+    
+    **Solutions**:
+    - Verify configuration file exists and is valid
+    - Check port 8000 is not already in use
+    - Ensure volumes are mounted correctly
+    - Verify environment variables are set
+    
+    ```bash
+    # Check port availability
+    netstat -tulpn | grep 8000
+    
+    # Validate config
+    yamllint config/config.yaml
+    
+    # Check environment variables
+    docker exec infraguard env | grep INFRAGUARD
+    ```
+  </Accordion>
+  
+  <Accordion title="Health Check Failing">
+    **Symptoms**: `/health` endpoint returns errors or timeouts
+    
+    **Diagnosis**:
+    ```bash
+    # Test health endpoint
+    curl -v http://localhost:8000/health
+    
+    # Check if API server is running
+    docker exec infraguard ps aux | grep python
+    ```
+    
+    **Solutions**:
+    - Restart the container
+    - Check API server logs for errors
+    - Verify database connectivity
+    - Ensure sufficient resources (CPU/memory)
+    
+    ```bash
+    # Restart container
+    docker restart infraguard
+    
+    # Check resource limits
+    docker stats infraguard
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Metric Collection
+
+<AccordionGroup>
+  <Accordion title="Can't Connect to Prometheus">
+    **Symptoms**: No metrics being collected, connection errors in logs
+    
+    **Diagnosis**:
+    ```bash
+    # Test Prometheus connectivity
+    docker exec infraguard curl http://prometheus:9090/-/healthy
+    
+    # Check network
+    docker network inspect infraguard-network
+    
+    # Verify Prometheus URL
+    docker exec infraguard env | grep PROMETHEUS_URL
+    ```
+    
+    **Solutions**:
+    - Verify Prometheus URL in configuration
+    - Check network connectivity between containers
+    - Ensure Prometheus is running
+    - Check firewall rules
+    
+    ```bash
+    # Test from host
+    curl http://localhost:9090/-/healthy
+    
+    # Update configuration
+    # Edit config/config.yaml with correct URL
+    
+    # Restart InfraGuard
+    docker restart infraguard
+    ```
+  </Accordion>
+  
+  <Accordion title="No Metrics Collected">
+    **Symptoms**: API returns empty metrics list
+    
+    **Diagnosis**:
+    ```bash
+    # Check if metrics are defined
+    curl http://localhost:8000/api/collector/metrics
+    
+    # Check collector logs
+    docker logs infraguard | grep collector
+    
+    # Test Prometheus query
+    curl "http://prometheus:9090/api/v1/query?query=up"
+    ```
+    
+    **Solutions**:
+    - Verify metrics are defined in configuration
+    - Check PromQL queries are valid
+    - Ensure Prometheus has data
+    - Trigger manual collection
+    
+    ```bash
+    # Trigger collection
+    curl -X POST http://localhost:8000/api/collector/collect
+    
+    # Verify metrics exist in Prometheus
+    curl "http://prometheus:9090/api/v1/label/__name__/values"
+    ```
+  </Accordion>
+  
+  <Accordion title="Incorrect Metric Values">
+    **Symptoms**: Metrics show wrong or unexpected values
+    
+    **Diagnosis**:
+    ```bash
+    # Compare with Prometheus
+    curl "http://prometheus:9090/api/v1/query?query=YOUR_QUERY"
+    
+    # Check InfraGuard values
+    curl "http://localhost:8000/api/collector/metrics?metric_name=YOUR_METRIC"
+    ```
+    
+    **Solutions**:
+    - Verify PromQL query syntax
+    - Check label selectors
+    - Ensure correct time ranges
+    - Validate aggregation functions
+  </Accordion>
+</AccordionGroup>
+
+### Anomaly Detection
+
+<AccordionGroup>
+  <Accordion title="Model Training Fails">
+    **Symptoms**: Training endpoint returns errors
+    
+    **Diagnosis**:
+    ```bash
+    # Check training logs
+    docker logs infraguard | grep "train"
+    
+    # Verify available data
+    curl "http://localhost:8000/api/collector/metrics?metric_name=cpu_usage"
+    
+    # Check model directory
+    docker exec infraguard ls -la /app/models
+    ```
+    
+    **Solutions**:
+    - Ensure sufficient historical data (minimum 100 points)
+    - Check data quality (no NaN values)
+    - Verify disk space for model storage
+    - Increase training timeout
+    
+    ```bash
+    # Check data points
+    curl "http://localhost:8000/api/collector/metrics?metric_name=cpu_usage" | jq '. | length'
+    
+    # Check disk space
+    docker exec infraguard df -h /app/models
+    ```
+  </Accordion>
+  
+  <Accordion title="Too Many False Positives">
+    **Symptoms**: Alerts for normal behavior
+    
+    **Diagnosis**:
+    ```bash
+    # Check current threshold
+    curl http://localhost:8000/api/detector/models/cpu_usage
+    
+    # Review recent anomalies
+    curl http://localhost:8000/api/detector/anomalies
+    ```
+    
+    **Solutions**:
+    - Increase anomaly threshold (0.7 → 0.8)
+    - Retrain with more data
+    - Adjust contamination parameter
+    - Review training data quality
+    
+    ```bash
+    # Update threshold
+    curl -X PUT http://localhost:8000/api/detector/threshold \
+      -H "Content-Type: application/json" \
+      -d '{"metric_name": "cpu_usage", "threshold": 0.8}'
+    
+    # Retrain model
+    curl -X POST http://localhost:8000/api/detector/train \
+      -H "Content-Type: application/json" \
+      -d '{"metric_name": "cpu_usage", "training_days": 14}'
+    ```
+  </Accordion>
+  
+  <Accordion title="Missing Anomalies">
+    **Symptoms**: Known issues not detected
+    
+    **Diagnosis**:
+    ```bash
+    # Check anomaly scores
+    curl http://localhost:8000/api/detector/detect \
+      -H "Content-Type: application/json" \
+      -d '{"metric_name": "cpu_usage", "values": [...]}'
+    ```
+    
+    **Solutions**:
+    - Lower anomaly threshold (0.7 → 0.6)
+    - Retrain model with recent data
+    - Check if metric is being collected
+    - Verify model is deployed
+    
+    ```bash
+    # Lower threshold
+    curl -X PUT http://localhost:8000/api/detector/threshold \
+      -H "Content-Type: application/json" \
+      -d '{"metric_name": "cpu_usage", "threshold": 0.6}'
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Alerting
+
+<AccordionGroup>
+  <Accordion title="Alerts Not Sent">
+    **Symptoms**: No alerts in Slack/Jira despite anomalies
+    
+    **Diagnosis**:
+    ```bash
+    # Check alerter logs
+    docker logs infraguard | grep alerter
+    
+    # Test integrations
+    curl -X POST http://localhost:8000/api/integrations/slack/test
+    curl -X POST http://localhost:8000/api/integrations/jira/test
+    
+    # Check alert routing
+    curl http://localhost:8000/api/alerter/config
+    ```
+    
+    **Solutions**:
+    - Verify integration credentials
+    - Check alert routing rules
+    - Test webhook URLs
+    - Review suppression rules
+    
+    ```bash
+    # Test Slack webhook
+    curl -X POST "${SLACK_WEBHOOK_URL}" \
+      -H "Content-Type: application/json" \
+      -d '{"text": "Test message"}'
+    
+    # Check active suppressions
+    curl http://localhost:8000/api/alerter/suppressions
+    ```
+  </Accordion>
+  
+  <Accordion title="Alert Storm">
+    **Symptoms**: Too many alerts in short time
+    
+    **Diagnosis**:
+    ```bash
+    # Check alert volume
+    curl http://localhost:8000/api/alerter/stats
+    
+    # Review recent alerts
+    curl http://localhost:8000/api/alerter/alerts?limit=100
+    ```
+    
+    **Solutions**:
+    - Enable deduplication
+    - Increase aggregation window
+    - Adjust alert thresholds
+    - Add suppression rules
+    
+    ```yaml
+    # Update config.yaml
+    alerting:
+      deduplication:
+        enabled: true
+        window_minutes: 10
+        max_alerts_per_window: 3
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Performance
+
+<AccordionGroup>
+  <Accordion title="High Memory Usage">
+    **Symptoms**: Container using excessive memory
+    
+    **Diagnosis**:
+    ```bash
+    # Check memory usage
+    docker stats infraguard
+    
+    # Check Python memory
+    docker exec infraguard ps aux | grep python
+    ```
+    
+    **Solutions**:
+    - Reduce batch size
+    - Limit cache size
+    - Decrease model complexity
+    - Add memory limits
+    
+    ```yaml
+    # docker-compose.yml
+    services:
+      infraguard:
+        deploy:
+          resources:
+            limits:
+              memory: 2G
+    ```
+  </Accordion>
+  
+  <Accordion title="Slow API Responses">
+    **Symptoms**: API requests timing out or slow
+    
+    **Diagnosis**:
+    ```bash
+    # Test API response time
+    time curl http://localhost:8000/api/collector/metrics
+    
+    # Check worker count
+    docker exec infraguard ps aux | grep gunicorn
+    ```
+    
+    **Solutions**:
+    - Increase API workers
+    - Enable caching
+    - Optimize database queries
+    - Add indexes
+    
+    ```yaml
+    # config.yaml
+    api:
+      workers: 8
+    
+    performance:
+      caching:
+        enabled: true
+        ttl: 300s
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Diagnostic Commands
+
+### System Health
+
+```bash
+# Overall health check
+curl http://localhost:8000/health
+
+# Component status
+curl http://localhost:8000/api/status
+
+# Version info
+curl http://localhost:8000/api/version
+```
+
+### Logs
+
+```bash
+# All logs
+docker logs infraguard
+
+# Follow logs
+docker logs -f infraguard
+
+# Last 100 lines
+docker logs --tail=100 infraguard
+
+# Logs since timestamp
+docker logs --since 2026-04-06T10:00:00 infraguard
+
+# Filter by component
+docker logs infraguard | grep collector
+docker logs infraguard | grep detector
+docker logs infraguard | grep alerter
+```
+
+### Resource Usage
+
+```bash
+# Container stats
+docker stats infraguard
+
+# Disk usage
+docker exec infraguard df -h
+
+# Memory breakdown
+docker exec infraguard free -h
+
+# Process list
+docker exec infraguard ps aux
+```
+
+## Getting Help
+
+<Card title="Still Having Issues?" icon="question">
+  If you can't resolve your issue:
+  
+  1. Check [GitHub Issues](https://github.com/your-org/infraguard/issues)
+  2. Join [Slack Community](https://slack.infraguard.io)
+  3. Email [support@infraguard.io](mailto:support@infraguard.io)
+  
+  Include:
+  - InfraGuard version
+  - Deployment method (Docker/Kubernetes)
+  - Error messages from logs
+  - Configuration (sanitized)
+  - Steps to reproduce
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration Guide" icon="gear" href="/deployment/configuration">
+    Review all configuration options
+  </Card>
+  
+  <Card title="Monitoring Guide" icon="chart-line" href="/advanced/monitoring">
+    Monitor InfraGuard itself
+  </Card>
+</CardGroup>

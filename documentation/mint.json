@@ -1,0 +1,124 @@
+{
+  "name": "InfraGuard",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#2196F3",
+    "light": "#64B5F6",
+    "dark": "#1976D2",
+    "anchors": {
+      "from": "#2196F3",
+      "to": "#1976D2"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "Support",
+      "url": "mailto:support@infraguard.io"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "GitHub",
+    "url": "https://github.com/your-org/infraguard"
+  },
+  "tabs": [
+    {
+      "name": "API Reference",
+      "url": "api-reference"
+    },
+    {
+      "name": "Guides",
+      "url": "guides"
+    }
+  ],
+  "anchors": [
+    {
+      "name": "Documentation",
+      "icon": "book-open-cover",
+      "url": "https://docs.infraguard.io"
+    },
+    {
+      "name": "Community",
+      "icon": "slack",
+      "url": "https://slack.infraguard.io"
+    },
+    {
+      "name": "Blog",
+      "icon": "newspaper",
+      "url": "https://blog.infraguard.io"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Get Started",
+      "pages": [
+        "introduction",
+        "quickstart",
+        "installation"
+      ]
+    },
+    {
+      "group": "Core Concepts",
+      "pages": [
+        "concepts/overview",
+        "concepts/architecture",
+        "concepts/anomaly-detection",
+        "concepts/forecasting",
+        "concepts/alerting"
+      ]
+    },
+    {
+      "group": "Deployment",
+      "pages": [
+        "deployment/docker",
+        "deployment/kubernetes",
+        "deployment/configuration"
+      ]
+    },
+    {
+      "group": "Integrations",
+      "pages": [
+        "integrations/prometheus",
+        "integrations/slack",
+        "integrations/jira",
+        "integrations/grafana"
+      ]
+    },
+    {
+      "group": "API Documentation",
+      "pages": [
+        "api-reference/introduction",
+        "api-reference/collector",
+        "api-reference/detector",
+        "api-reference/forecaster",
+        "api-reference/alerter"
+      ]
+    },
+    {
+      "group": "Guides",
+      "pages": [
+        "guides/getting-started",
+        "guides/training-models",
+        "guides/custom-metrics",
+        "guides/runbooks",
+        "guides/troubleshooting"
+      ]
+    },
+    {
+      "group": "Advanced",
+      "pages": [
+        "advanced/property-testing",
+        "advanced/performance-tuning",
+        "advanced/security",
+        "advanced/monitoring"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/your-org/infraguard",
+    "linkedin": "https://www.linkedin.com/company/infraguard"
+  }
+}

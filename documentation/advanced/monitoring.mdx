@@ -1,0 +1,370 @@
+---
+title: 'Monitoring InfraGuard'
+description: 'Monitor InfraGuard itself for reliability'
+icon: 'chart-line'
+---
+
+## Overview
+
+Monitor InfraGuard's own health and performance to ensure reliable anomaly detection and alerting.
+
+## Metrics Exposed
+
+InfraGuard exposes Prometheus metrics on port 9100:
+
+```bash
+curl http://localhost:9100/metrics
+```
+
+### System Metrics
+
+```promql
+# API request rate
+rate(infraguard_api_requests_total[5m])
+
+# API latency
+histogram_quantile(0.95, rate(infraguard_api_request_duration_bucket[5m]))
+
+# Error rate
+rate(infraguard_api_errors_total[5m])
+
+# Active connections
+infraguard_api_connections_active
+```
+
+### Collector Metrics
+
+```promql
+# Collection success rate
+rate(infraguard_collector_success_total[5m]) / rate(infraguard_collector_attempts_total[5m])
+
+# Collection duration
+infraguard_collector_duration_seconds
+
+# Metrics collected
+rate(infraguard_collector_metrics_total[5m])
+
+# Collection errors
+rate(infraguard_collector_errors_total[5m])
+```
+
+### Detector Metrics
+
+```promql
+# Detection rate
+rate(infraguard_detector_detections_total[5m])
+
+# Anomalies detected
+rate(infraguard_detector_anomalies_total[5m])
+
+# Model training duration
+infraguard_detector_training_duration_seconds
+
+# Model accuracy
+infraguard_detector_model_accuracy
+```
+
+### Alerter Metrics
+
+```promql
+# Alerts sent
+rate(infraguard_alerter_alerts_sent_total[5m])
+
+# Alert delivery failures
+rate(infraguard_alerter_delivery_failures_total[5m])
+
+# MTTA (Mean Time To Acknowledge)
+infraguard_alerter_mtta_seconds
+
+# MTTR (Mean Time To Resolve)
+infraguard_alerter_mttr_seconds
+```
+
+## Grafana Dashboard
+
+Import the InfraGuard monitoring dashboard:
+
+```bash
+# Import dashboard
+curl -X POST http://grafana:3000/api/dashboards/db \
+  -H "Authorization: Bearer ${GRAFANA_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d @dashboards/infraguard-monitoring.json
+```
+
+Dashboard includes:
+
+<CardGroup cols={2}>
+  <Card title="System Health" icon="heart-pulse">
+    CPU, memory, disk usage, uptime
+  </Card>
+  
+  <Card title="API Performance" icon="gauge">
+    Request rate, latency, error rate
+  </Card>
+  
+  <Card title="Collection Status" icon="database">
+    Metrics collected, success rate, errors
+  </Card>
+  
+  <Card title="Detection Performance" icon="magnifying-glass">
+    Anomalies detected, model accuracy
+  </Card>
+  
+  <Card title="Alert Analytics" icon="bell">
+    Alerts sent, MTTA, MTTR, delivery rate
+  </Card>
+  
+  <Card title="Resource Usage" icon="server">
+    Container resources, database connections
+  </Card>
+</CardGroup>
+
+## Health Checks
+
+### Liveness Probe
+
+```yaml
+# Kubernetes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+```
+
+### Readiness Probe
+
+```yaml
+# Kubernetes
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+```
+
+### Health Endpoint Response
+
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "components": {
+    "api": "healthy",
+    "collector": "healthy",
+    "detector": "healthy",
+    "alerter": "healthy",
+    "database": "healthy"
+  },
+  "uptime_seconds": 86400
+}
+```
+
+## Alerting on InfraGuard
+
+Create alerts for InfraGuard issues:
+
+```yaml
+# prometheus-alerts.yml
+groups:
+  - name: infraguard_alerts
+    rules:
+      - alert: InfraGuardDown
+        expr: up{job="infraguard"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "InfraGuard is down"
+          description: "InfraGuard has been down for 5 minutes"
+      
+      - alert: InfraGuardHighErrorRate
+        expr: rate(infraguard_api_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate in InfraGuard"
+          description: "Error rate is {{ $value }} errors/sec"
+      
+      - alert: InfraGuardCollectionFailing
+        expr: rate(infraguard_collector_errors_total[5m]) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "InfraGuard metric collection failing"
+          description: "Collection error rate is {{ $value }}"
+      
+      - alert: InfraGuardHighMemory
+        expr: container_memory_usage_bytes{name="infraguard"} / container_spec_memory_limit_bytes{name="infraguard"} > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "InfraGuard high memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+```
+
+## Log Monitoring
+
+### Structured Logging
+
+```json
+{
+  "timestamp": "2026-04-06T10:30:00Z",
+  "level": "INFO",
+  "component": "collector",
+  "message": "Metrics collected successfully",
+  "metrics_count": 42,
+  "duration_ms": 1250
+}
+```
+
+### Log Aggregation
+
+```yaml
+# Filebeat configuration
+filebeat.inputs:
+  - type: container
+    paths:
+      - '/var/lib/docker/containers/*/*.log'
+    processors:
+      - add_docker_metadata:
+          host: "unix:///var/run/docker.sock"
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  index: "infraguard-logs-%{+yyyy.MM.dd}"
+```
+
+### Log Queries
+
+```
+# Errors in last hour
+level:ERROR AND timestamp:[now-1h TO now]
+
+# Slow API requests
+component:api AND duration_ms:>1000
+
+# Collection failures
+component:collector AND message:"failed"
+```
+
+## Performance Monitoring
+
+### Resource Usage
+
+```bash
+# Container stats
+docker stats infraguard
+
+# Detailed metrics
+docker exec infraguard ps aux
+docker exec infraguard free -h
+docker exec infraguard df -h
+```
+
+### Database Performance
+
+```sql
+-- Slow queries
+SELECT query, mean_exec_time, calls
+FROM pg_stat_statements
+WHERE mean_exec_time > 1000
+ORDER BY mean_exec_time DESC
+LIMIT 10;
+
+-- Connection pool status
+SELECT count(*) as connections,
+       state
+FROM pg_stat_activity
+WHERE datname = 'infraguard'
+GROUP BY state;
+
+-- Table sizes
+SELECT schemaname, tablename,
+       pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
+FROM pg_tables
+WHERE schemaname = 'public'
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+```
+
+## Troubleshooting Metrics
+
+```bash
+# Check if metrics endpoint is accessible
+curl http://localhost:9100/metrics
+
+# Verify Prometheus is scraping
+curl http://prometheus:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="infraguard")'
+
+# Check metric values
+curl "http://prometheus:9090/api/v1/query?query=infraguard_api_requests_total"
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Metrics Collection">
+    - Scrape InfraGuard metrics every 15-30 seconds
+    - Set up retention for at least 30 days
+    - Use recording rules for complex queries
+    - Monitor metric cardinality
+  </Accordion>
+  
+  <Accordion title="Alerting">
+    - Alert on InfraGuard downtime
+    - Monitor error rates and latency
+    - Track collection and detection failures
+    - Set up escalation for critical issues
+  </Accordion>
+  
+  <Accordion title="Dashboards">
+    - Create overview dashboard for quick health check
+    - Detailed dashboards per component
+    - Include SLO/SLA metrics
+    - Share dashboards with team
+  </Accordion>
+</AccordionGroup>
+
+## SLO/SLA Tracking
+
+```yaml
+# Service Level Objectives
+slos:
+  - name: "API Availability"
+    target: 99.9%
+    metric: "up{job='infraguard'}"
+  
+  - name: "API Latency"
+    target: "p95 < 200ms"
+    metric: "histogram_quantile(0.95, rate(infraguard_api_request_duration_bucket[5m]))"
+  
+  - name: "Collection Success Rate"
+    target: 99%
+    metric: "rate(infraguard_collector_success_total[5m]) / rate(infraguard_collector_attempts_total[5m])"
+  
+  - name: "Alert Delivery Rate"
+    target: 99.5%
+    metric: "rate(infraguard_alerter_alerts_sent_total[5m]) / rate(infraguard_alerter_alerts_total[5m])"
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Performance Tuning" icon="gauge" href="/advanced/performance-tuning">
+    Optimize InfraGuard performance
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Debug common issues
+  </Card>
+</CardGroup>

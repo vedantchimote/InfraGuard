@@ -1,0 +1,347 @@
+---
+title: 'Runbooks Guide'
+description: 'Create effective runbooks for alert response'
+icon: 'book'
+---
+
+## Overview
+
+Runbooks provide step-by-step instructions for responding to alerts, reducing MTTR and enabling faster incident resolution.
+
+## Runbook Structure
+
+A good runbook includes:
+
+<Steps>
+  <Step title="Alert Description">
+    What triggered the alert and why it matters
+  </Step>
+  
+  <Step title="Impact Assessment">
+    What services or users are affected
+  </Step>
+  
+  <Step title="Diagnostic Steps">
+    How to investigate and confirm the issue
+  </Step>
+  
+  <Step title="Resolution Steps">
+    How to fix the problem
+  </Step>
+  
+  <Step title="Escalation">
+    When and how to escalate
+  </Step>
+</Steps>
+
+## Example Runbook: High CPU Usage
+
+```markdown
+# High CPU Usage Runbook
+
+## Alert Description
+CPU usage has exceeded 90% for more than 5 minutes on one or more hosts.
+
+## Impact
+- Slow response times for users
+- Potential service degradation
+- Risk of service outage if sustained
+
+## Severity
+**Critical** if > 95% for > 10 minutes
+**Warning** if > 90% for > 5 minutes
+
+## Diagnostic Steps
+
+### 1. Identify Affected Hosts
+```bash
+# Check current CPU usage
+curl "http://prometheus:9090/api/v1/query?query=cpu_usage_percent"
+
+# View in Grafana
+https://grafana/d/cpu-dashboard
+```
+
+### 2. Identify Top Processes
+```bash
+# SSH to affected host
+ssh user@affected-host
+
+# Check top processes
+top -o %CPU
+
+# Or use htop
+htop
+```
+
+### 3. Check Recent Changes
+- Review recent deployments
+- Check for scheduled jobs
+- Look for traffic spikes
+
+## Resolution Steps
+
+### Quick Fixes
+
+**Option 1: Restart Service**
+```bash
+# Restart application
+sudo systemctl restart app-service
+
+# Verify CPU returns to normal
+watch -n 1 'top -bn1 | grep "Cpu(s)"'
+```
+
+**Option 2: Kill Runaway Process**
+```bash
+# Identify process ID
+ps aux | sort -nrk 3,3 | head -n 5
+
+# Kill process
+sudo kill -9 <PID>
+```
+
+**Option 3: Scale Horizontally**
+```bash
+# Add more instances (Kubernetes)
+kubectl scale deployment app --replicas=5
+
+# Or (Docker Swarm)
+docker service scale app=5
+```
+
+### Long-term Fixes
+
+1. **Optimize Code**: Profile and optimize CPU-intensive operations
+2. **Add Caching**: Reduce computational load
+3. **Increase Resources**: Upgrade instance type
+4. **Load Balancing**: Distribute load across more instances
+
+## Escalation
+
+Escalate if:
+- CPU remains > 95% after 15 minutes
+- Service is completely down
+- Quick fixes don't resolve the issue
+
+**Escalation Contact**: @oncall-engineer or #ops-critical
+
+## Prevention
+
+- Set up auto-scaling based on CPU metrics
+- Regular performance testing
+- Code profiling in development
+- Capacity planning reviews
+
+## Related Alerts
+- High Memory Usage
+- Slow Response Time
+- Service Unavailable
+
+## Links
+- [Grafana Dashboard](https://grafana/d/cpu)
+- [Logs](https://kibana/app/logs)
+- [Architecture Docs](https://wiki/architecture)
+```
+
+## Runbook Template
+
+```markdown
+# [Alert Name] Runbook
+
+## Alert Description
+[What triggered this alert]
+
+## Impact
+[What is affected and how]
+
+## Severity
+[Critical/Warning/Info and conditions]
+
+## Diagnostic Steps
+
+### 1. [First Check]
+```bash
+[Commands to run]
+```
+
+### 2. [Second Check]
+```bash
+[Commands to run]
+```
+
+## Resolution Steps
+
+### Quick Fixes
+[Immediate actions to take]
+
+### Long-term Fixes
+[Permanent solutions]
+
+## Escalation
+[When and how to escalate]
+
+## Prevention
+[How to prevent this in the future]
+
+## Related Alerts
+[Links to related runbooks]
+
+## Links
+[Dashboards, logs, documentation]
+```
+
+## Linking Runbooks to Alerts
+
+### In Configuration
+
+```yaml
+alerting:
+  routing:
+    - name: "high_cpu"
+      metric_pattern: "cpu_usage_.*"
+      runbook_url: "https://wiki/runbooks/high-cpu"
+      channels:
+        - type: "slack"
+          channel: "#ops-alerts"
+```
+
+### Via API
+
+```python
+from infraguard import Alert
+
+alert = Alert(
+    severity="critical",
+    title="High CPU Usage",
+    metric_name="cpu_usage",
+    runbook_url="https://wiki/runbooks/high-cpu"
+)
+```
+
+## Runbook Best Practices
+
+<AccordionGroup>
+  <Accordion title="Keep It Simple">
+    - Use clear, concise language
+    - Avoid jargon and acronyms
+    - Include copy-paste commands
+    - Use screenshots where helpful
+  </Accordion>
+  
+  <Accordion title="Make It Actionable">
+    - Start with most common solutions
+    - Include exact commands to run
+    - Provide expected outputs
+    - Include rollback procedures
+  </Accordion>
+  
+  <Accordion title="Keep It Updated">
+    - Review after each incident
+    - Update when systems change
+    - Remove outdated information
+    - Version control your runbooks
+  </Accordion>
+  
+  <Accordion title="Test Regularly">
+    - Run through runbooks quarterly
+    - Update based on feedback
+    - Ensure links still work
+    - Verify commands are correct
+  </Accordion>
+</AccordionGroup>
+
+## Common Runbook Topics
+
+<CardGroup cols={2}>
+  <Card title="High CPU Usage" icon="microchip">
+    Diagnose and resolve CPU spikes
+  </Card>
+  
+  <Card title="High Memory Usage" icon="memory">
+    Handle memory leaks and OOM errors
+  </Card>
+  
+  <Card title="Disk Space Full" icon="hard-drive">
+    Free up disk space and prevent recurrence
+  </Card>
+  
+  <Card title="Service Down" icon="circle-xmark">
+    Restore service availability quickly
+  </Card>
+  
+  <Card title="Slow Response Time" icon="clock">
+    Identify and fix performance issues
+  </Card>
+  
+  <Card title="Database Issues" icon="database">
+    Handle connection pools, slow queries
+  </Card>
+  
+  <Card title="Network Issues" icon="network-wired">
+    Diagnose connectivity problems
+  </Card>
+  
+  <Card title="Security Alerts" icon="shield">
+    Respond to security incidents
+  </Card>
+</CardGroup>
+
+## Runbook Storage
+
+Store runbooks in version control:
+
+```
+docs/
+  runbooks/
+    high-cpu.md
+    high-memory.md
+    disk-full.md
+    service-down.md
+    slow-response.md
+    database-issues.md
+```
+
+## Automation Opportunities
+
+Identify steps that can be automated:
+
+```python
+# Auto-remediation script
+def handle_high_cpu(alert):
+    # Check if safe to restart
+    if is_safe_to_restart(alert.host):
+        # Restart service
+        restart_service(alert.host, "app-service")
+        
+        # Wait and verify
+        time.sleep(30)
+        if check_cpu_normal(alert.host):
+            return "resolved"
+    
+    # If not resolved, escalate
+    escalate_to_oncall(alert)
+```
+
+## Measuring Runbook Effectiveness
+
+Track these metrics:
+
+| Metric | Target | Description |
+|--------|--------|-------------|
+| MTTR | < 30 min | Mean time to resolve |
+| Runbook Usage | > 80% | % of incidents using runbook |
+| Success Rate | > 90% | % resolved without escalation |
+| Update Frequency | Monthly | How often runbooks are updated |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Alerting Guide" icon="bell" href="/concepts/alerting">
+    Learn about alert configuration
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Common issues and solutions
+  </Card>
+</CardGroup>

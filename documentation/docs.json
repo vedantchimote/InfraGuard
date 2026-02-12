@@ -1,0 +1,136 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "InfraGuard",
+  "colors": {
+    "primary": "#2196F3",
+    "light": "#64B5F6",
+    "dark": "#1976D2"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/overview",
+              "concepts/architecture",
+              "concepts/anomaly-detection",
+              "concepts/forecasting",
+              "concepts/alerting"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/kubernetes",
+              "deployment/configuration"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/prometheus",
+              "integrations/slack",
+              "integrations/jira",
+              "integrations/grafana"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/property-testing",
+              "advanced/performance-tuning",
+              "advanced/security",
+              "advanced/monitoring"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API Documentation",
+            "pages": [
+              "api-reference/introduction",
+              "api-reference/collector",
+              "api-reference/detector",
+              "api-reference/forecaster",
+              "api-reference/alerter"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/getting-started",
+              "guides/training-models",
+              "guides/custom-metrics",
+              "guides/runbooks",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Documentation",
+          "href": "https://docs.infraguard.io",
+          "icon": "book-open-cover"
+        },
+        {
+          "anchor": "Community",
+          "href": "https://slack.infraguard.io",
+          "icon": "slack"
+        },
+        {
+          "anchor": "Blog",
+          "href": "https://blog.infraguard.io",
+          "icon": "newspaper"
+        }
+      ]
+    }
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "mailto:support@infraguard.io"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "GitHub",
+      "href": "https://github.com/your-org/infraguard"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/your-org/infraguard",
+      "linkedin": "https://www.linkedin.com/company/infraguard"
+    }
+  }
+}

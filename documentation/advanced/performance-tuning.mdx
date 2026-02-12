@@ -1,0 +1,221 @@
+---
+title: 'Performance Tuning'
+description: 'Optimize InfraGuard for high-scale deployments'
+icon: 'gauge'
+---
+
+## Overview
+
+Optimize InfraGuard for handling thousands of metrics and high-volume alerting.
+
+## Key Performance Metrics
+
+| Metric | Target | Description |
+|--------|--------|-------------|
+| Collection Latency | < 5s | Time to collect all metrics |
+| Detection Latency | < 1s | Time to detect anomalies |
+| API Response Time | < 200ms | API endpoint response time |
+| Memory Usage | < 2GB | Container memory footprint |
+| CPU Usage | < 50% | Average CPU utilization |
+
+## Configuration Tuning
+
+### API Server
+
+```yaml
+api:
+  workers: 8              # 2x CPU cores
+  timeout: 60s
+  max_connections: 1000
+  
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 1000
+    burst: 100
+```
+
+### Collector
+
+```yaml
+collector:
+  prometheus:
+    scrape_interval: 60s  # Balance freshness vs load
+    timeout: 30s
+    max_retries: 3
+    batch_size: 100       # Metrics per batch
+  
+  performance:
+    parallel_queries: 4   # Concurrent Prometheus queries
+    cache_results: true
+    cache_ttl: 30s
+```
+
+### Detector
+
+```yaml
+detector:
+  isolation_forest:
+    n_estimators: 100     # More = better accuracy, slower
+    max_samples: 256      # Lower = faster training
+  
+  training:
+    parallel_models: 4    # Train multiple metrics concurrently
+    batch_size: 1000
+  
+  performance:
+    cache_predictions: true
+    cache_ttl: 60s
+```
+
+### Database
+
+```yaml
+database:
+  type: "postgresql"      # Use PostgreSQL for production
+  
+  postgresql:
+    pool_size: 20
+    max_overflow: 40
+    pool_timeout: 30s
+    pool_recycle: 3600
+```
+
+## Caching Strategy
+
+### Memory Cache
+
+```yaml
+performance:
+  caching:
+    enabled: true
+    backend: "memory"
+    ttl: 300s
+    max_size_mb: 512
+```
+
+### Redis Cache
+
+```yaml
+performance:
+  caching:
+    enabled: true
+    backend: "redis"
+    ttl: 300s
+  
+  redis:
+    host: "redis"
+    port: 6379
+    db: 0
+    max_connections: 50
+```
+
+## Resource Limits
+
+### Docker
+
+```yaml
+services:
+  infraguard:
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 2G
+```
+
+### Kubernetes
+
+```yaml
+resources:
+  requests:
+    memory: "2Gi"
+    cpu: "1000m"
+  limits:
+    memory: "4Gi"
+    cpu: "4000m"
+```
+
+## Monitoring Performance
+
+```bash
+# API latency
+curl http://localhost:8000/metrics | grep api_request_duration
+
+# Collection performance
+curl http://localhost:8000/metrics | grep collector_duration
+
+# Detection performance
+curl http://localhost:8000/metrics | grep detector_duration
+
+# Resource usage
+docker stats infraguard
+```
+
+## Optimization Checklist
+
+<AccordionGroup>
+  <Accordion title="Metric Collection">
+    - [ ] Use appropriate scrape intervals
+    - [ ] Enable query caching
+    - [ ] Batch metric queries
+    - [ ] Use Prometheus recording rules
+    - [ ] Limit label cardinality
+  </Accordion>
+  
+  <Accordion title="Anomaly Detection">
+    - [ ] Tune model parameters
+    - [ ] Enable prediction caching
+    - [ ] Use parallel training
+    - [ ] Optimize training schedule
+    - [ ] Prune old models
+  </Accordion>
+  
+  <Accordion title="Database">
+    - [ ] Use PostgreSQL for production
+    - [ ] Add appropriate indexes
+    - [ ] Configure connection pooling
+    - [ ] Set up read replicas
+    - [ ] Implement data retention
+  </Accordion>
+  
+  <Accordion title="API">
+    - [ ] Increase worker count
+    - [ ] Enable response caching
+    - [ ] Implement rate limiting
+    - [ ] Use connection pooling
+    - [ ] Enable compression
+  </Accordion>
+</AccordionGroup>
+
+## Scaling Strategies
+
+### Vertical Scaling
+
+Increase resources for single instance:
+- 4-8 CPU cores
+- 8-16GB RAM
+- SSD storage
+- Tune worker counts
+
+### Horizontal Scaling
+
+Deploy multiple instances:
+- Load balancer in front
+- Shared PostgreSQL database
+- Redis for distributed caching
+- Metric sharding by host/service
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Monitoring" icon="chart-line" href="/advanced/monitoring">
+    Monitor InfraGuard itself
+  </Card>
+  
+  <Card title="Security" icon="shield" href="/advanced/security">
+    Secure your deployment
+  </Card>
+</CardGroup>

@@ -1,0 +1,95 @@
+---
+title: 'Grafana Integration'
+description: 'Visualize InfraGuard metrics and alerts in Grafana'
+icon: 'chart-line'
+---
+
+## Overview
+
+InfraGuard integrates with Grafana to provide rich visualizations of anomaly detection, forecasts, and alert history.
+
+## Setup
+
+<Steps>
+  <Step title="Create API Key">
+    1. In Grafana, go to Configuration → API Keys
+    2. Click "Add API key"
+    3. Name: "InfraGuard", Role: "Editor"
+    4. Copy the API key
+  </Step>
+  
+  <Step title="Configure InfraGuard">
+    ```yaml
+    integrations:
+      grafana:
+        enabled: true
+        url: "http://grafana:3000"
+        api_key: "${GRAFANA_API_KEY}"
+        dashboard_uid: "infraguard-overview"
+    ```
+  </Step>
+  
+  <Step title="Import Dashboards">
+    ```bash
+    infraguard grafana import-dashboards
+    ```
+  </Step>
+</Steps>
+
+## Pre-built Dashboards
+
+InfraGuard includes ready-to-use dashboards:
+
+<CardGroup cols={2}>
+  <Card title="Overview Dashboard" icon="gauge">
+    System health, active alerts, anomaly trends
+  </Card>
+  
+  <Card title="Anomaly Detection" icon="magnifying-glass-chart">
+    Anomaly scores, detection accuracy, false positives
+  </Card>
+  
+  <Card title="Forecasting" icon="chart-line">
+    Predictions vs actuals, forecast accuracy, confidence intervals
+  </Card>
+  
+  <Card title="Alert Analytics" icon="bell">
+    Alert volume, MTTA, MTTR, escalation rates
+  </Card>
+</CardGroup>
+
+## Custom Panels
+
+Create custom panels using InfraGuard's Prometheus metrics:
+
+```promql
+# Anomaly score over time
+infraguard_anomaly_score{metric="cpu_usage"}
+
+# Forecast accuracy
+infraguard_forecast_mape{metric="memory_usage"}
+
+# Alert counts by severity
+sum by (severity) (infraguard_alerts_total)
+```
+
+## Annotations
+
+InfraGuard automatically adds annotations to Grafana for:
+
+- Anomaly detections
+- Alert triggers
+- Model retraining events
+- Configuration changes
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Custom Metrics" icon="chart-mixed" href="/guides/custom-metrics">
+    Add your own metrics to monitor
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Debug integration issues
+  </Card>
+</CardGroup>

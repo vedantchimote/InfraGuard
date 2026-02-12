@@ -1,0 +1,15 @@
+<svg width="200" height="60" viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shield icon -->
+  <path d="M20 10L30 5L40 10V25C40 32 35 38 30 40C25 38 20 32 20 25V10Z" fill="#64B5F6" stroke="#2196F3" stroke-width="2"/>
+  <path d="M27 20L29 22L33 18" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Text: InfraGuard -->
+  <text x="50" y="30" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="white">
+    InfraGuard
+  </text>
+  
+  <!-- Tagline -->
+  <text x="50" y="45" font-family="Arial, sans-serif" font-size="10" fill="#90CAF9">
+    AI-Powered AIOps
+  </text>
+</svg>

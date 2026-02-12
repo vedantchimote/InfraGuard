@@ -1,0 +1,340 @@
+---
+title: 'Security Best Practices'
+description: 'Secure your InfraGuard deployment'
+icon: 'shield'
+---
+
+## Overview
+
+Implement security best practices to protect your InfraGuard deployment and sensitive monitoring data.
+
+## Authentication
+
+### API Key Authentication
+
+```yaml
+api:
+  auth:
+    enabled: true
+    type: "api_key"
+    api_keys:
+      - key: "${API_KEY_ADMIN}"
+        name: "admin"
+        permissions: ["read", "write", "admin"]
+      
+      - key: "${API_KEY_READONLY}"
+        name: "readonly"
+        permissions: ["read"]
+```
+
+Usage:
+
+```bash
+curl -H "X-API-Key: ${API_KEY_ADMIN}" \
+  http://localhost:8000/api/metrics
+```
+
+### OAuth2 Authentication
+
+```yaml
+api:
+  auth:
+    enabled: true
+    type: "oauth2"
+    oauth2:
+      provider: "okta"
+      client_id: "${OAUTH_CLIENT_ID}"
+      client_secret: "${OAUTH_CLIENT_SECRET}"
+      authorization_url: "https://your-domain.okta.com/oauth2/v1/authorize"
+      token_url: "https://your-domain.okta.com/oauth2/v1/token"
+```
+
+## TLS/SSL
+
+### Enable HTTPS
+
+```yaml
+api:
+  tls:
+    enabled: true
+    cert_file: "/app/certs/server.crt"
+    key_file: "/app/certs/server.key"
+    ca_file: "/app/certs/ca.crt"
+```
+
+### Generate Self-Signed Certificate
+
+```bash
+# Generate private key
+openssl genrsa -out server.key 2048
+
+# Generate certificate
+openssl req -new -x509 -key server.key -out server.crt -days 365
+
+# Mount in Docker
+docker run -v $(pwd)/certs:/app/certs infraguard/infraguard
+```
+
+## Secrets Management
+
+### Environment Variables
+
+```bash
+# Never commit secrets to git
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/..."
+export JIRA_API_TOKEN="your_token"
+export API_KEY_ADMIN="your_api_key"
+```
+
+### Docker Secrets
+
+```yaml
+# docker-compose.yml
+services:
+  infraguard:
+    secrets:
+      - slack_webhook
+      - jira_token
+      - api_key
+
+secrets:
+  slack_webhook:
+    file: ./secrets/slack_webhook.txt
+  jira_token:
+    file: ./secrets/jira_token.txt
+  api_key:
+    file: ./secrets/api_key.txt
+```
+
+### Kubernetes Secrets
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: infraguard-secrets
+type: Opaque
+stringData:
+  slack-webhook: "https://hooks.slack.com/..."
+  jira-token: "your_token"
+  api-key: "your_api_key"
+```
+
+## Network Security
+
+### Firewall Rules
+
+```bash
+# Allow only necessary ports
+ufw allow 8000/tcp  # API
+ufw allow 9100/tcp  # Metrics
+ufw deny 5432/tcp   # Block external DB access
+```
+
+### Network Policies (Kubernetes)
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: infraguard-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: infraguard
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: nginx-ingress
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+```
+
+## Data Protection
+
+### Encryption at Rest
+
+```yaml
+database:
+  postgresql:
+    ssl_mode: "require"
+    ssl_cert: "/app/certs/client.crt"
+    ssl_key: "/app/certs/client.key"
+    ssl_root_cert: "/app/certs/ca.crt"
+```
+
+### Encryption in Transit
+
+```yaml
+integrations:
+  prometheus:
+    tls:
+      enabled: true
+      verify: true
+      ca_cert: "/app/certs/prometheus-ca.crt"
+```
+
+## Access Control
+
+### Role-Based Access Control (RBAC)
+
+```yaml
+api:
+  auth:
+    rbac:
+      enabled: true
+      roles:
+        - name: "admin"
+          permissions:
+            - "metrics:read"
+            - "metrics:write"
+            - "models:train"
+            - "alerts:manage"
+            - "config:write"
+        
+        - name: "operator"
+          permissions:
+            - "metrics:read"
+            - "alerts:read"
+            - "alerts:acknowledge"
+        
+        - name: "readonly"
+          permissions:
+            - "metrics:read"
+            - "alerts:read"
+```
+
+### IP Whitelisting
+
+```yaml
+api:
+  security:
+    ip_whitelist:
+      enabled: true
+      allowed_ips:
+        - "10.0.0.0/8"
+        - "172.16.0.0/12"
+        - "192.168.1.100"
+```
+
+## Audit Logging
+
+```yaml
+logging:
+  audit:
+    enabled: true
+    log_file: "/app/logs/audit.log"
+    events:
+      - "auth.login"
+      - "auth.logout"
+      - "auth.failed"
+      - "config.update"
+      - "model.train"
+      - "alert.acknowledge"
+      - "alert.suppress"
+```
+
+## Security Headers
+
+```yaml
+api:
+  security:
+    headers:
+      X-Content-Type-Options: "nosniff"
+      X-Frame-Options: "DENY"
+      X-XSS-Protection: "1; mode=block"
+      Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+      Content-Security-Policy: "default-src 'self'"
+```
+
+## Vulnerability Scanning
+
+```bash
+# Scan Docker image
+docker scan infraguard/infraguard:latest
+
+# Scan dependencies
+pip-audit
+
+# SAST scanning
+bandit -r src/
+```
+
+## Security Checklist
+
+<AccordionGroup>
+  <Accordion title="Authentication & Authorization">
+    - [ ] Enable API authentication
+    - [ ] Use strong API keys (32+ characters)
+    - [ ] Implement RBAC
+    - [ ] Rotate credentials regularly
+    - [ ] Use OAuth2 for user authentication
+  </Accordion>
+  
+  <Accordion title="Network Security">
+    - [ ] Enable TLS/SSL
+    - [ ] Use valid certificates (not self-signed in prod)
+    - [ ] Implement firewall rules
+    - [ ] Use network policies (Kubernetes)
+    - [ ] Restrict external access
+  </Accordion>
+  
+  <Accordion title="Data Protection">
+    - [ ] Encrypt data at rest
+    - [ ] Encrypt data in transit
+    - [ ] Secure database connections
+    - [ ] Implement backup encryption
+    - [ ] Use secrets management
+  </Accordion>
+  
+  <Accordion title="Monitoring & Auditing">
+    - [ ] Enable audit logging
+    - [ ] Monitor failed auth attempts
+    - [ ] Set up security alerts
+    - [ ] Regular security reviews
+    - [ ] Vulnerability scanning
+  </Accordion>
+</AccordionGroup>
+
+## Compliance
+
+### GDPR Considerations
+
+- Implement data retention policies
+- Provide data export capabilities
+- Enable data deletion
+- Log data access
+- Obtain consent for data collection
+
+### SOC 2 Considerations
+
+- Enable audit logging
+- Implement access controls
+- Encrypt sensitive data
+- Regular security assessments
+- Incident response procedures
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Monitoring" icon="chart-line" href="/advanced/monitoring">
+    Monitor InfraGuard security metrics
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Debug security issues
+  </Card>
+</CardGroup>

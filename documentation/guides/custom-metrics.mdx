@@ -1,0 +1,301 @@
+---
+title: 'Custom Metrics Guide'
+description: 'Add and monitor your own custom metrics'
+icon: 'chart-mixed'
+---
+
+## Overview
+
+InfraGuard allows you to monitor any metric available in Prometheus using custom PromQL queries.
+
+## Adding Custom Metrics
+
+### Via Configuration File
+
+Add metrics to your `config.yaml`:
+
+```yaml
+collector:
+  metrics:
+    # HTTP request rate
+    - name: "http_requests_per_second"
+      query: "rate(http_requests_total[5m])"
+      labels: ["instance", "method", "status"]
+      enabled: true
+      alert_threshold: 1000
+    
+    # Database connection pool
+    - name: "db_connection_pool_usage"
+      query: "(db_connections_active / db_connections_max) * 100"
+      labels: ["instance", "database"]
+      enabled: true
+      alert_threshold: 80
+    
+    # Custom application metric
+    - name: "order_processing_time_ms"
+      query: "histogram_quantile(0.95, rate(order_processing_duration_bucket[5m]))"
+      labels: ["instance", "region"]
+      enabled: true
+      alert_threshold: 5000
+```
+
+### Via API
+
+```bash
+curl -X POST http://localhost:8000/api/collector/metrics \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "custom_metric",
+    "query": "rate(my_metric_total[5m])",
+    "labels": ["instance"],
+    "alert_threshold": 100
+  }'
+```
+
+### Via Python SDK
+
+```python
+from infraguard import Collector
+
+collector = Collector(config)
+
+# Add custom metric
+collector.add_metric(
+    name="api_latency_p95",
+    query='histogram_quantile(0.95, rate(api_request_duration_bucket[5m]))',
+    labels=["instance", "endpoint"],
+    alert_threshold=500
+)
+```
+
+## PromQL Query Examples
+
+<AccordionGroup>
+  <Accordion title="Rate Calculations">
+    ```promql
+    # Request rate per second
+    rate(http_requests_total[5m])
+    
+    # Error rate
+    rate(http_requests_total{status=~"5.."}[5m])
+    
+    # Network throughput
+    rate(node_network_receive_bytes_total[5m])
+    ```
+  </Accordion>
+  
+  <Accordion title="Aggregations">
+    ```promql
+    # Average CPU across all instances
+    avg(cpu_usage_percent)
+    
+    # Sum of requests by status
+    sum by (status) (http_requests_total)
+    
+    # Max memory usage
+    max(memory_usage_bytes)
+    ```
+  </Accordion>
+  
+  <Accordion title="Percentiles">
+    ```promql
+    # 95th percentile latency
+    histogram_quantile(0.95, rate(request_duration_bucket[5m]))
+    
+    # 99th percentile
+    histogram_quantile(0.99, rate(request_duration_bucket[5m]))
+    ```
+  </Accordion>
+  
+  <Accordion title="Ratios">
+    ```promql
+    # Error rate percentage
+    (rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])) * 100
+    
+    # Cache hit ratio
+    (redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total)) * 100
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Metric Configuration Options
+
+```yaml
+metrics:
+  - name: "metric_name"              # Required: Unique metric identifier
+    query: "promql_query"            # Required: PromQL query
+    labels: ["label1", "label2"]     # Optional: Labels to extract
+    enabled: true                    # Optional: Enable/disable collection
+    alert_threshold: 100             # Optional: Alert threshold value
+    description: "Metric description" # Optional: Human-readable description
+    unit: "percent"                  # Optional: Unit of measurement
+    collection_interval: 60s         # Optional: Override default interval
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Query Performance">
+    - Use appropriate time ranges (5m for rates, 1h for trends)
+    - Avoid queries that scan too much data
+    - Use recording rules for complex queries
+    - Test queries in Prometheus first
+  </Accordion>
+  
+  <Accordion title="Metric Naming">
+    - Use descriptive names: `api_latency_p95` not `metric1`
+    - Include unit in name: `_percent`, `_bytes`, `_seconds`
+    - Use consistent naming conventions
+    - Group related metrics with prefixes
+  </Accordion>
+  
+  <Accordion title="Label Selection">
+    - Include only necessary labels
+    - Avoid high-cardinality labels (user IDs, timestamps)
+    - Use labels for filtering and grouping
+    - Keep label count reasonable (< 10)
+  </Accordion>
+</AccordionGroup>
+
+## Example: Application Metrics
+
+Monitor a web application:
+
+```yaml
+collector:
+  metrics:
+    # Request metrics
+    - name: "app_requests_per_second"
+      query: "rate(app_http_requests_total[5m])"
+      labels: ["instance", "endpoint", "method"]
+    
+    - name: "app_error_rate_percent"
+      query: "(rate(app_http_requests_total{status=~'5..'}[5m]) / rate(app_http_requests_total[5m])) * 100"
+      labels: ["instance", "endpoint"]
+      alert_threshold: 5
+    
+    # Latency metrics
+    - name: "app_latency_p50_ms"
+      query: "histogram_quantile(0.50, rate(app_request_duration_bucket[5m])) * 1000"
+      labels: ["instance", "endpoint"]
+    
+    - name: "app_latency_p95_ms"
+      query: "histogram_quantile(0.95, rate(app_request_duration_bucket[5m])) * 1000"
+      labels: ["instance", "endpoint"]
+      alert_threshold: 500
+    
+    - name: "app_latency_p99_ms"
+      query: "histogram_quantile(0.99, rate(app_request_duration_bucket[5m])) * 1000"
+      labels: ["instance", "endpoint"]
+      alert_threshold: 1000
+    
+    # Business metrics
+    - name: "app_orders_per_minute"
+      query: "rate(app_orders_total[1m]) * 60"
+      labels: ["instance", "region"]
+    
+    - name: "app_revenue_per_hour"
+      query: "rate(app_revenue_total[1h]) * 3600"
+      labels: ["instance", "region"]
+```
+
+## Testing Custom Metrics
+
+<Steps>
+  <Step title="Test Query in Prometheus">
+    ```bash
+    # Test query directly
+    curl "http://prometheus:9090/api/v1/query?query=rate(http_requests_total[5m])"
+    ```
+  </Step>
+  
+  <Step title="Add to InfraGuard">
+    ```bash
+    curl -X POST http://localhost:8000/api/collector/metrics \
+      -H "Content-Type: application/json" \
+      -d '{"name": "test_metric", "query": "rate(http_requests_total[5m])"}'
+    ```
+  </Step>
+  
+  <Step title="Trigger Collection">
+    ```bash
+    curl -X POST http://localhost:8000/api/collector/collect
+    ```
+  </Step>
+  
+  <Step title="Verify Data">
+    ```bash
+    curl "http://localhost:8000/api/collector/metrics?metric_name=test_metric"
+    ```
+  </Step>
+</Steps>
+
+## Advanced: Recording Rules
+
+For complex queries, use Prometheus recording rules:
+
+```yaml
+# prometheus-rules.yml
+groups:
+  - name: infraguard_recording_rules
+    interval: 60s
+    rules:
+      - record: app:request_rate:5m
+        expr: rate(http_requests_total[5m])
+      
+      - record: app:error_rate:5m
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])
+```
+
+Then use in InfraGuard:
+
+```yaml
+collector:
+  metrics:
+    - name: "app_request_rate"
+      query: "app:request_rate:5m"
+      labels: ["instance"]
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No Data Collected">
+    ```bash
+    # Verify query returns data
+    curl "http://prometheus:9090/api/v1/query?query=YOUR_QUERY"
+    
+    # Check metric exists in Prometheus
+    curl "http://prometheus:9090/api/v1/label/__name__/values" | grep your_metric
+    
+    # Check InfraGuard logs
+    docker logs infraguard | grep "your_metric"
+    ```
+  </Accordion>
+  
+  <Accordion title="Query Too Slow">
+    - Reduce time range in query
+    - Use recording rules for complex queries
+    - Add more specific label filters
+    - Check Prometheus query performance
+  </Accordion>
+  
+  <Accordion title="Incorrect Values">
+    - Verify PromQL query syntax
+    - Check label selectors
+    - Test query in Prometheus UI
+    - Verify time range and rate intervals
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Training Models" icon="graduation-cap" href="/guides/training-models">
+    Train models for your custom metrics
+  </Card>
+  
+  <Card title="Prometheus Integration" icon="chart-line" href="/integrations/prometheus">
+    Learn more about Prometheus setup
+  </Card>
+</CardGroup>
