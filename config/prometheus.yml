@@ -1,0 +1,37 @@
+# Prometheus configuration for InfraGuard local development
+
+global:
+  scrape_interval: 15s      # Scrape targets every 15 seconds
+  evaluation_interval: 15s  # Evaluate rules every 15 seconds
+  external_labels:
+    monitor: 'infraguard-dev'
+
+# Scrape configurations
+scrape_configs:
+  # Dummy application metrics
+  - job_name: 'dummy-app'
+    static_configs:
+      - targets: ['dummy-app:8080']
+        labels:
+          environment: 'development'
+          service: 'dummy-app'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          environment: 'development'
+          service: 'prometheus'
+
+  # InfraGuard health monitoring (optional)
+  - job_name: 'infraguard'
+    static_configs:
+      - targets: ['infraguard:8000']
+        labels:
+          environment: 'development'
+          service: 'infraguard'
+    metrics_path: '/health'
+    scrape_interval: 30s

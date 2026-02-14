@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install Flask
+RUN pip install --no-cache-dir flask==3.0.0
+
+# Copy dummy app
+COPY docker/dummy_app.py .
+
+# Expose metrics port
+EXPOSE 8080
+
+# Run the application
+CMD ["python", "dummy_app.py"]
