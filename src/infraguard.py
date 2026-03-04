@@ -19,6 +19,7 @@ from src.collector.data_formatter import DataFormatter
 from src.ml.isolation_forest_detector import IsolationForestDetector
 from src.alerter.alert_manager import AlertManager
 from src.utils.logging_config import setup_logging
+from src.health_server import HealthServer
 
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,14 @@ class InfraGuard:
         # Runtime state
         self.running = False
         self.last_collection_time: Optional[datetime] = None
+        
+        # Health server
+        health_config = self.config_mgr.get('health', {})
+        if health_config.get('enabled', True):
+            health_port = health_config.get('port', 8000)
+            self.health_server = HealthServer(health_port, self.get_status)
+        else:
+            self.health_server = None
         
         # Setup signal handlers for graceful shutdown
         self._setup_signal_handlers()
@@ -283,6 +292,10 @@ class InfraGuard:
         logger.info("Starting InfraGuard AIOps")
         logger.info("=" * 60)
         
+        # Start health server
+        if self.health_server:
+            self.health_server.start()
+        
         self.running = True
         
         try:
@@ -313,6 +326,11 @@ class InfraGuard:
         if self.running:
             logger.info("Stopping InfraGuard...")
             self.running = False
+            
+            # Stop health server
+            if self.health_server:
+                self.health_server.stop()
+            
             logger.info("InfraGuard stopped")
     
     def get_status(self) -> dict:
