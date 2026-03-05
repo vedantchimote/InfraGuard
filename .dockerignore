@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Testing
+.pytest_cache
+.hypothesis
+htmlcov/
+.coverage
+.coverage.*
+*.cover
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+documentation/
+docs/
+*.md
+!README.md
+
+# Logs
+logs/
+*.log
+
+# Models (will be mounted as volume)
+models/pretrained/
+
+# Config (will be mounted as volume)
+config/settings.yaml
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Kiro
+.kiro/
+
+# Misc
+.DS_Store
+*.bak
+*.tmp
