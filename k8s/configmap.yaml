@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: infraguard-config
+  labels:
+    app: infraguard
+data:
+  settings.yaml: |
+    # InfraGuard AIOps Configuration
+    
+    # Prometheus connection settings
+    prometheus:
+      url: "${PROMETHEUS_URL:http://prometheus:9090}"
+      timeout: 30
+      queries:
+        - name: "cpu_usage"
+          query: "cpu_usage_percent"
+          metric_type: "cpu"
+        - name: "memory_usage"
+          query: "memory_usage_percent"
+          metric_type: "memory"
+        - name: "http_error_rate"
+          query: "http_error_rate_percent"
+          metric_type: "error_rate"
+        - name: "request_latency"
+          query: "request_latency_ms"
+          metric_type: "latency"
+    
+    # Collection settings
+    collection:
+      interval: 60
+      batch_size: 100
+    
+    # Machine Learning settings
+    ml:
+      isolation_forest:
+        n_estimators: 100
+        max_samples: 256
+        contamination: 0.1
+        random_state: 42
+        max_features: 1.0
+      
+      model_path: "models/pretrained/isolation_forest.pkl"
+      rolling_windows: [5, 10, 30]
+      
+      thresholds:
+        cpu:
+          confidence: 80
+          severity_high: 95
+          severity_medium: 85
+        memory:
+          confidence: 80
+          severity_high: 95
+          severity_medium: 85
+        error_rate:
+          confidence: 75
+          severity_high: 90
+          severity_medium: 80
+        latency:
+          confidence: 80
+          severity_high: 95
+          severity_medium: 85
+    
+    # Time-series forecasting (optional)
+    forecasting:
+      enabled: false
+      prophet:
+        seasonality_mode: "multiplicative"
+        changepoint_prior_scale: 0.05
+        interval_width: 0.95
+      prediction_window: 3600
+      forecast_interval: 300
+    
+    # Alerting configuration
+    alerting:
+      slack:
+        enabled: false
+        webhook_url: "${SLACK_WEBHOOK_URL}"
+        channel: "#infraguard-alerts"
+        retry_attempts: 3
+        retry_delay: 10
+      
+      jira:
+        enabled: false
+        url: "${JIRA_URL}"
+        project_key: "${JIRA_PROJECT_KEY}"
+        username: "${JIRA_USERNAME}"
+        api_token: "${JIRA_API_TOKEN}"
+      
+      runbooks:
+        cpu:
+          high: "https://runbooks.example.com/cpu-spike"
+          medium: "https://runbooks.example.com/cpu-elevated"
+        memory:
+          high: "https://runbooks.example.com/memory-leak"
+          medium: "https://runbooks.example.com/memory-elevated"
+        error_rate:
+          high: "https://runbooks.example.com/error-spike"
+          medium: "https://runbooks.example.com/error-elevated"
+        latency:
+          high: "https://runbooks.example.com/latency-spike"
+          medium: "https://runbooks.example.com/latency-elevated"
+        default: "https://runbooks.example.com/general-troubleshooting"
+    
+    # Logging configuration
+    logging:
+      level: "${LOG_LEVEL:INFO}"
+      format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+      file: "logs/infraguard.log"
+      max_bytes: 10485760
+      backup_count: 5
+    
+    # Health check configuration
+    health:
+      enabled: true
+      port: 8000
+      endpoint: "/health"

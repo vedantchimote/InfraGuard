@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: infraguard
+  labels:
+    app: infraguard
+    component: aiops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: infraguard
+  template:
+    metadata:
+      labels:
+        app: infraguard
+        component: aiops
+    spec:
+      containers:
+      - name: infraguard
+        image: infraguard:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: health
+          containerPort: 8000
+          protocol: TCP
+        env:
+        - name: PROMETHEUS_URL
+          value: "http://prometheus:9090"
+        - name: LOG_LEVEL
+          value: "INFO"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: models
+          mountPath: /app/models
+        - name: logs
+          mountPath: /app/logs
+        - name: secrets
+          mountPath: /app/secrets
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: health
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: health
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: config
+        configMap:
+          name: infraguard-config
+      - name: models
+        persistentVolumeClaim:
+          claimName: infraguard-models
+      - name: logs
+        emptyDir: {}
+      - name: secrets
+        secret:
+          secretName: infraguard-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: infraguard
+  labels:
+    app: infraguard
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: health
+    protocol: TCP
+    name: health
+  selector:
+    app: infraguard
