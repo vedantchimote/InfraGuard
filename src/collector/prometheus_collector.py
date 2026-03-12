@@ -74,12 +74,12 @@ class PrometheusCollector:
         Raises:
             ValueError: If required configuration is missing
         """
-        if 'prometheus_url' not in config:
-            raise ValueError("prometheus_url is required in config")
+        if 'prometheus_url' not in config and 'url' not in config:
+            raise ValueError("prometheus_url or url is required in config")
         if 'queries' not in config or not config['queries']:
             raise ValueError("queries list is required in config")
         
-        self.prometheus_url = config['prometheus_url'].rstrip('/')
+        self.prometheus_url = config.get('prometheus_url', config.get('url', '')).rstrip('/')
         self.timeout = config.get('timeout', 30)
         
         # Parse queries into PrometheusQuery objects
