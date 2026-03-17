@@ -133,14 +133,14 @@ Each task builds incrementally on previous work, with checkpoints to validate pr
     - Test model file creation
     - _Requirements: 3.1_
 
-- [ ] 8. Implement optional time-series forecaster
-  - [ ] 8.1 Create TimeSeriesForecaster class with Prophet
+- [x] 8. Implement optional time-series forecaster
+  - [x] 8.1 Create TimeSeriesForecaster class with Prophet
     - Implement __init__ to initialize Prophet with config parameters
     - Implement _prepare_prophet_data to convert DataFrame to Prophet format
     - Implement _fit_model to train Prophet on historical data
     - _Requirements: 4.1_
 
-  - [ ] 8.2 Implement forecasting logic
+  - [x] 8.2 Implement forecasting logic
     - Implement forecast method to generate predictions for prediction window
     - Implement predict_threshold_breach to check for threshold violations
     - Create ForecastResult dataclass to encapsulate predictions

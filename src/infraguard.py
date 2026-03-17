@@ -17,6 +17,7 @@ from src.config.configuration_manager import ConfigurationManager, Configuration
 from src.collector.prometheus_collector import PrometheusCollector
 from src.collector.data_formatter import DataFormatter
 from src.ml.isolation_forest_detector import IsolationForestDetector
+from src.ml.forecaster import TimeSeriesForecaster
 from src.alerter.alert_manager import AlertManager
 from src.utils.logging_config import setup_logging
 from src.health_server import HealthServer
@@ -37,8 +38,10 @@ class InfraGuard:
         collector: PrometheusCollector instance
         formatter: DataFormatter instance
         detector: IsolationForestDetector instance
+        forecaster: TimeSeriesForecaster instance (optional)
         alert_manager: AlertManager instance
         collection_interval: Seconds between collection cycles
+        forecasting_enabled: Whether time-series forecasting is enabled
         running: Flag indicating if application is running
     
     Example:
@@ -84,6 +87,21 @@ class InfraGuard:
         # Load pre-trained model
         model_path = ml_config.get('model_path', 'models/pretrained/isolation_forest.pkl')
         self._load_model(model_path)
+        
+        # Time-series forecaster (optional)
+        forecasting_config = self.config_mgr.get('forecasting', {})
+        self.forecasting_enabled = forecasting_config.get('enabled', False)
+        
+        if self.forecasting_enabled:
+            logger.info("Time-series forecasting is enabled")
+            self.forecaster = TimeSeriesForecaster(forecasting_config)
+            self.forecast_interval = forecasting_config.get('forecast_interval', 300)
+            self.last_forecast_time: Optional[datetime] = None
+        else:
+            logger.info("Time-series forecasting is disabled")
+            self.forecaster = None
+            self.forecast_interval = None
+            self.last_forecast_time = None
         
         # Alert manager
         alerting_config = self.config_mgr.get_alerting_config()
@@ -281,6 +299,107 @@ class InfraGuard:
         else:
             return 'low'
     
+    def _execute_forecasting(self) -> None:
+        """
+        Execute time-series forecasting for predictive alerting.
+        
+        This method:
+        1. Collects historical metrics from Prometheus
+        2. Generates forecasts for the prediction window
+        3. Checks for predicted threshold breaches
+        4. Sends forecast alerts if breaches are predicted
+        """
+        if not self.forecasting_enabled or not self.forecaster:
+            return
+        
+        # Check if it's time to run forecasting
+        if self.last_forecast_time:
+            time_since_last = (datetime.now() - self.last_forecast_time).total_seconds()
+            if time_since_last < self.forecast_interval:
+                return
+        
+        try:
+            logger.info("Starting forecasting cycle")
+            forecast_start = time.time()
+            
+            # Collect historical metrics (need more data for forecasting)
+            # Query last 7 days of data
+            logger.debug("Collecting historical metrics for forecasting")
+            results = self.collector.collect_metrics()
+            
+            successful_results = [r for r in results if r['success']]
+            if not successful_results:
+                logger.warning("No metrics collected for forecasting, skipping")
+                return
+            
+            logger.info(f"Collected {len(successful_results)} metric types for forecasting")
+            
+            # Process each metric
+            for result in successful_results:
+                metric_name = result['query_name']
+                metric_type = result['metric_type']
+                
+                try:
+                    # Format data
+                    df = self.formatter.format_prometheus_response(result['data'], metric_name)
+                    
+                    if df.empty or len(df) < 2880:  # Need at least 2 days
+                        logger.debug(
+                            f"Insufficient data for forecasting {metric_name} "
+                            f"({len(df)} points, need >= 2880)"
+                        )
+                        continue
+                    
+                    # Generate forecast
+                    forecast_result = self.forecaster.forecast(df, metric_type)
+                    
+                    # Check for predicted breach
+                    if forecast_result.breach_time:
+                        logger.warning(
+                            f"Threshold breach predicted for {metric_name} at "
+                            f"{forecast_result.breach_time}: "
+                            f"value={forecast_result.breach_value:.2f}"
+                        )
+                        
+                        # Determine severity based on confidence interval
+                        thresholds = self.config_mgr.get('ml.thresholds', {})
+                        metric_threshold = thresholds.get(metric_type, {})
+                        
+                        # Use high severity for predicted breaches
+                        severity = 'high'
+                        
+                        # Send forecast alert
+                        self.alert_manager.send_forecast_alert(
+                            metric_name=metric_name,
+                            predicted_value=forecast_result.breach_value,
+                            breach_time=forecast_result.breach_time,
+                            confidence_lower=forecast_result.confidence_interval_lower,
+                            confidence_upper=forecast_result.confidence_interval_upper,
+                            severity=severity,
+                            prediction_window_minutes=self.forecaster.prediction_window_minutes,
+                            additional_context={
+                                'metric_type': metric_type
+                            }
+                        )
+                    else:
+                        logger.debug(f"No threshold breach predicted for {metric_name}")
+                
+                except ValueError as e:
+                    logger.debug(f"Cannot forecast {metric_name}: {e}")
+                    continue
+                except Exception as e:
+                    logger.error(f"Error forecasting {metric_name}: {e}", exc_info=True)
+                    continue
+            
+            # Update last forecast time
+            self.last_forecast_time = datetime.now()
+            
+            forecast_duration = time.time() - forecast_start
+            logger.info(f"Forecasting cycle completed in {forecast_duration:.2f} seconds")
+            
+        except Exception as e:
+            logger.error(f"Forecasting cycle failed: {e}", exc_info=True)
+    
     def run(self) -> None:
         """
         Run main collection loop.
@@ -303,6 +422,10 @@ class InfraGuard:
                 try:
                     # Execute collection cycle
                     self._execute_collection_cycle()
+                    
+                    # Execute forecasting (if enabled and due)
+                    if self.forecasting_enabled:
+                        self._execute_forecasting()
                     
                     # Sleep until next collection
                     if self.running:
@@ -340,11 +463,18 @@ class InfraGuard:
         Returns:
             Dictionary containing status information
         """
-        return {
+        status = {
             'running': self.running,
             'last_collection_time': self.last_collection_time.isoformat() if self.last_collection_time else None,
             'collection_interval': self.collection_interval,
             'model_loaded': hasattr(self.detector.model, 'estimators_'),
             'slack_enabled': self.alert_manager.slack_enabled,
-            'jira_enabled': self.alert_manager.jira_enabled
+            'jira_enabled': self.alert_manager.jira_enabled,
+            'forecasting_enabled': self.forecasting_enabled
         }
+        
+        if self.forecasting_enabled:
+            status['last_forecast_time'] = self.last_forecast_time.isoformat() if self.last_forecast_time else None
+            status['forecast_interval'] = self.forecast_interval
+        
+        return status
