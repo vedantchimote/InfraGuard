@@ -137,7 +137,7 @@ class TimeSeriesForecaster:
         # Create future dataframe for prediction window
         future = self.model.make_future_dataframe(
             periods=self.prediction_window_minutes,
-            freq='T'  # Minute frequency
+            freq='min'  # Minute frequency (use 'min' instead of deprecated 'T')
         )
         
         # Generate forecast
@@ -252,7 +252,12 @@ class TimeSeriesForecaster:
         """
         # Try direct lookup first
         if metric_name in self.thresholds:
-            return self.thresholds[metric_name]
+            threshold_value = self.thresholds[metric_name]
+            # If it's a dict, extract severity_high
+            if isinstance(threshold_value, dict):
+                return threshold_value.get('severity_high')
+            else:
+                return threshold_value
         
         # Try to extract metric type (e.g., 'cpu' from 'cpu_usage')
         metric_type = metric_name.split('_')[0] if '_' in metric_name else metric_name
