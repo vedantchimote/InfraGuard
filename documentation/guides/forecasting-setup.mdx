@@ -1,0 +1,348 @@
+---
+title: 'Setting Up Time-Series Forecasting'
+description: 'Learn how to enable and configure predictive failure analysis with Prophet'
+icon: 'crystal-ball'
+---
+
+## Overview
+
+InfraGuard's time-series forecasting feature uses Facebook Prophet to predict future metric values and alert you before infrastructure failures impact users. This guide walks you through enabling and configuring forecasting.
+
+## Prerequisites
+
+Before enabling forecasting, ensure:
+
+- InfraGuard is collecting metrics successfully
+- At least 2-3 days of historical data is available
+- Prophet dependencies are installed (included in requirements.txt)
+
+## Configuration
+
+### 1. Enable Forecasting
+
+Edit `config/settings.yaml` and set `forecasting.enabled` to `true`:
+
+```yaml
+forecasting:
+  enabled: true  # Enable time-series forecasting
+  prophet:
+    seasonality_mode: "multiplicative"
+    changepoint_prior_scale: 0.05
+    interval_width: 0.95
+  prediction_window: 3600  # Forecast 1 hour ahead (in seconds)
+  forecast_interval: 300   # Generate forecasts every 5 minutes
+```
+
+### 2. Configure Prediction Window
+
+The `prediction_window` determines how far into the future to forecast:
+
+- **900 seconds (15 minutes)**: Quick response time, good for rapidly changing metrics
+- **3600 seconds (1 hour)**: Balanced approach, recommended for most use cases
+- **7200 seconds (2 hours)**: Longer lead time for slower-changing metrics
+
+```yaml
+forecasting:
+  prediction_window: 3600  # 1 hour ahead
+```
+
+### 3. Set Forecast Interval
+
+The `forecast_interval` controls how often forecasts are generated:
+
+- **300 seconds (5 minutes)**: Frequent updates, higher CPU usage
+- **600 seconds (10 minutes)**: Balanced approach
+- **900 seconds (15 minutes)**: Less frequent, lower resource usage
+
+```yaml
+forecasting:
+  forecast_interval: 300  # Every 5 minutes
+```
+
+### 4. Configure Prophet Parameters
+
+Prophet has several tunable parameters:
+
+#### Seasonality Mode
+
+- **additive**: Seasonal effects are constant over time
+- **multiplicative**: Seasonal effects scale with the trend (recommended for infrastructure metrics)
+
+```yaml
+forecasting:
+  prophet:
+    seasonality_mode: "multiplicative"
+```
+
+#### Changepoint Prior Scale
+
+Controls how flexible the trend is:
+
+- **0.001-0.01**: Very rigid trend (use for stable metrics)
+- **0.05**: Default, balanced flexibility (recommended)
+- **0.1-0.5**: Very flexible trend (use for volatile metrics)
+
+```yaml
+forecasting:
+  prophet:
+    changepoint_prior_scale: 0.05
+```
+
+#### Interval Width
+
+Confidence interval width for predictions:
+
+- **0.80**: Narrower intervals, more confident predictions
+- **0.95**: Wider intervals, more conservative (recommended)
+- **0.99**: Very wide intervals, very conservative
+
+```yaml
+forecasting:
+  prophet:
+    interval_width: 0.95
+```
+
+## Threshold Configuration
+
+Forecasting uses the same thresholds as anomaly detection. Configure critical thresholds for each metric type:
+
+```yaml
+ml:
+  thresholds:
+    cpu:
+      confidence: 80
+      severity_high: 95  # Alert if CPU predicted to exceed 95%
+      severity_medium: 85
+    memory:
+      confidence: 80
+      severity_high: 95  # Alert if memory predicted to exceed 95%
+      severity_medium: 85
+    error_rate:
+      confidence: 75
+      severity_high: 10  # Alert if error rate predicted to exceed 10%
+      severity_medium: 5
+```
+
+## Testing Forecasting
+
+### 1. Validate Configuration
+
+Run the forecasting test suite to ensure everything is configured correctly:
+
+```bash
+docker-compose exec infraguard python scripts/test_forecasting.py
+```
+
+Expected output:
+```
+✅ All tests passed!
+
+The TimeSeriesForecaster is working correctly:
+  - Initializes with configuration
+  - Generates forecasts from historical data
+  - Detects threshold breaches
+  - Handles insufficient data gracefully
+  - Serializes results to dict
+```
+
+### 2. Check Logs
+
+After enabling forecasting, monitor the logs for forecast generation:
+
+```bash
+docker-compose logs -f infraguard | grep -i forecast
+```
+
+You should see:
+```
+INFO - Time-series forecasting is enabled
+INFO - Starting forecasting cycle
+INFO - Collected 4 metric types for forecasting
+INFO - Generating forecast for cpu_usage with 4320 historical points
+INFO - Forecast generated for cpu_usage: 60 predictions, breach_predicted=false
+INFO - Forecasting cycle completed in 2.34 seconds
+```
+
+### 3. Verify Health Status
+
+Check the health endpoint to confirm forecasting is active:
+
+```bash
+curl http://localhost:8000/health | jq
+```
+
+Response should include:
+```json
+{
+  "status": "healthy",
+  "forecasting_enabled": true,
+  "last_forecast_time": "2026-04-10T18:30:00",
+  "forecast_interval": 300
+}
+```
+
+## Understanding Forecast Alerts
+
+When a threshold breach is predicted, InfraGuard sends forecast alerts with:
+
+### Alert Content
+
+- **Metric name**: Which metric will breach
+- **Predicted value**: Expected value at breach time
+- **Breach time**: When the breach is predicted to occur
+- **Confidence interval**: Range of possible values
+- **Prediction window**: How far ahead the forecast looks
+- **Severity**: Based on threshold configuration
+
+### Example Slack Alert
+
+```
+🔮 Predicted Threshold Breach
+
+Metric: cpu_usage
+Predicted Value: 97.5%
+Breach Time: 2026-04-10 19:15:00 (in 45 minutes)
+Confidence: [95.2%, 99.8%]
+Severity: HIGH
+
+Prediction Window: 60 minutes
+Runbook: https://runbooks.example.com/cpu-spike
+```
+
+### Example Jira Ticket
+
+```
+Title: [PREDICTED] CPU Usage Threshold Breach
+
+Description:
+A threshold breach is predicted for cpu_usage in 45 minutes.
+
+Predicted Value: 97.5%
+Breach Time: 2026-04-10 19:15:00
+Confidence Interval: [95.2%, 99.8%]
+Prediction Window: 60 minutes
+
+This is a predictive alert. Take proactive action to prevent user impact.
+
+Runbook: https://runbooks.example.com/cpu-spike
+```
+
+## Troubleshooting
+
+### Insufficient Historical Data
+
+**Error**: `Insufficient historical data for forecasting: 1440 points (need >= 2880)`
+
+**Solution**: Wait for more data to accumulate. Forecasting requires at least 2 days of historical data at 1-minute intervals.
+
+### Forecasts Not Generated
+
+**Check**:
+1. Verify `forecasting.enabled: true` in config
+2. Check logs for errors: `docker-compose logs infraguard | grep -i error`
+3. Ensure Prophet is installed: `docker-compose exec infraguard pip list | grep prophet`
+
+### High CPU Usage
+
+**Solution**: Increase `forecast_interval` to reduce frequency:
+
+```yaml
+forecasting:
+  forecast_interval: 900  # Every 15 minutes instead of 5
+```
+
+### False Positive Predictions
+
+**Solution**: Adjust Prophet parameters for more conservative forecasts:
+
+```yaml
+forecasting:
+  prophet:
+    changepoint_prior_scale: 0.01  # More rigid trend
+    interval_width: 0.99  # Wider confidence intervals
+```
+
+## Best Practices
+
+### 1. Start with Defaults
+
+Use the default configuration initially and tune based on observed behavior:
+
+```yaml
+forecasting:
+  enabled: true
+  prediction_window: 3600
+  forecast_interval: 300
+  prophet:
+    seasonality_mode: "multiplicative"
+    changepoint_prior_scale: 0.05
+    interval_width: 0.95
+```
+
+### 2. Monitor Resource Usage
+
+Forecasting is more CPU-intensive than anomaly detection. Monitor resource usage:
+
+```bash
+docker stats infraguard-aiops
+```
+
+### 3. Tune for Your Metrics
+
+Different metrics may need different configurations:
+
+- **CPU/Memory**: Use multiplicative seasonality
+- **Error rates**: Use additive seasonality
+- **Stable metrics**: Lower changepoint_prior_scale (0.01)
+- **Volatile metrics**: Higher changepoint_prior_scale (0.1)
+
+### 4. Combine with Anomaly Detection
+
+Forecasting complements anomaly detection:
+
+- **Anomaly detection**: Catches unexpected deviations now
+- **Forecasting**: Predicts problems before they occur
+
+Keep both enabled for comprehensive monitoring.
+
+### 5. Validate Predictions
+
+Periodically review forecast accuracy:
+
+1. Check if predicted breaches actually occurred
+2. Adjust thresholds if too many false positives
+3. Tune Prophet parameters if predictions are inaccurate
+
+## Performance Impact
+
+### Resource Usage
+
+- **CPU**: +20-30% during forecast generation
+- **Memory**: +50-100MB for Prophet models
+- **Disk**: Minimal (models not persisted)
+
+### Timing
+
+- **Forecast generation**: 1-3 seconds per metric
+- **Total cycle time**: 5-15 seconds for 4 metrics
+- **Recommended interval**: 5-10 minutes
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Alerting" icon="bell" href="/integrations/slack">
+    Set up Slack and Jira to receive forecast alerts
+  </Card>
+  
+  <Card title="Grafana Dashboard" icon="chart-line" href="/integrations/grafana">
+    Visualize forecasts alongside actual metrics
+  </Card>
+  
+  <Card title="Runbook Mapping" icon="book" href="/guides/runbooks">
+    Create runbooks for predicted failures
+  </Card>
+  
+  <Card title="Advanced Tuning" icon="sliders" href="/advanced/performance-tuning">
+    Optimize forecasting performance
+  </Card>
+</CardGroup>

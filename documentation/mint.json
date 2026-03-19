@@ -102,6 +102,7 @@
       "pages": [
         "guides/getting-started",
         "guides/training-models",
+        "guides/forecasting-setup",
         "guides/custom-metrics",
         "guides/runbooks",
         "guides/troubleshooting"
