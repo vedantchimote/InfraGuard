@@ -56,9 +56,33 @@ services:
       - infraguard-network
     restart: unless-stopped
 
+  # Grafana visualization and dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: infraguard-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/infraguard-dashboard.json:/etc/grafana/provisioning/dashboards/infraguard-dashboard.json
+      - ./grafana/provisioning.yaml:/etc/grafana/provisioning/dashboards/provisioning.yaml
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    depends_on:
+      - prometheus
+    networks:
+      - infraguard-network
+    restart: unless-stopped
+
 networks:
   infraguard-network:
     driver: bridge
 
 volumes:
   prometheus-data:
+  grafana-data:

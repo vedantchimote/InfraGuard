@@ -320,8 +320,8 @@ Each task builds incrementally on previous work, with checkpoints to validate pr
     - Mount PVC to InfraGuard pod
     - _Requirements: 9.3_
 
-- [ ] 19. Create Grafana dashboard
-  - [ ] 19.1 Create dashboard JSON configuration
+- [x] 19. Create Grafana dashboard
+  - [x] 19.1 Create dashboard JSON configuration
     - Define panels for monitored metrics with time-series graphs
     - Define panel for recent anomaly detections
     - Define panel for alert delivery status
