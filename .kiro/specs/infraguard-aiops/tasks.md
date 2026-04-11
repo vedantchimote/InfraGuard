@@ -372,7 +372,7 @@ Each task builds incrementally on previous work, with checkpoints to validate pr
     - Create example runbook for memory leak remediation
     - Create example runbook for HTTP error rate remediation
 
-- [ ] 22. Final checkpoint - End-to-end validation
+- [x] 22. Final checkpoint - End-to-end validation
   - Deploy InfraGuard to local Kubernetes cluster (kind/minikube)
   - Verify metrics collection from Prometheus
   - Inject anomalies and verify detection

@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dummy-app
+  labels:
+    app: dummy-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dummy-app
+  template:
+    metadata:
+      labels:
+        app: dummy-app
+    spec:
+      containers:
+      - name: dummy-app
+        image: python:3.11-slim
+        command:
+          - sh
+          - -c
+          - |
+            pip install flask prometheus_client && python /app/dummy_app.py
+        ports:
+        - name: metrics
+          containerPort: 8080
+        volumeMounts:
+        - name: app
+          mountPath: /app
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: app
+        configMap:
+          name: dummy-app-code
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dummy-app
+  labels:
+    app: dummy-app
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: metrics
+    protocol: TCP
+    name: metrics
+  selector:
+    app: dummy-app
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dummy-app-code
+  labels:
+    app: dummy-app
+data:
+  dummy_app.py: |
+    from flask import Flask, Response
+    from prometheus_client import Counter, Gauge, generate_latest, REGISTRY
+    import random
+    import time
+    import math
+
+    app = Flask(__name__)
+
+    # Metrics
+    cpu_usage = Gauge('cpu_usage_percent', 'CPU usage percentage')
+    memory_usage = Gauge('memory_usage_percent', 'Memory usage percentage')
+    http_error_rate = Gauge('http_error_rate_percent', 'HTTP error rate percentage')
+    request_latency = Gauge('request_latency_ms', 'Request latency in milliseconds')
+
+    def generate_metrics():
+        """Generate realistic metrics with some anomalies"""
+        t = time.time()
+        
+        # CPU usage: 30-70% with occasional spikes
+        base_cpu = 50 + 20 * math.sin(t / 100)
+        spike = 30 if random.random() < 0.05 else 0
+        cpu_usage.set(max(0, min(100, base_cpu + spike + random.gauss(0, 5))))
+        
+        # Memory usage: slowly increasing with occasional drops
+        base_memory = 60 + 10 * math.sin(t / 200)
+        memory_usage.set(max(0, min(100, base_memory + random.gauss(0, 3))))
+        
+        # HTTP error rate: usually low, occasional spikes
+        base_error = 2
+        error_spike = 15 if random.random() < 0.03 else 0
+        http_error_rate.set(max(0, min(100, base_error + error_spike + random.gauss(0, 0.5))))
+        
+        # Request latency: 50-150ms with occasional high latency
+        base_latency = 100 + 30 * math.sin(t / 150)
+        latency_spike = 200 if random.random() < 0.04 else 0
+        request_latency.set(max(0, base_latency + latency_spike + random.gauss(0, 10)))
+
+    @app.route('/metrics')
+    def metrics():
+        generate_metrics()
+        return Response(generate_latest(REGISTRY), mimetype='text/plain')
+
+    @app.route('/health')
+    def health():
+        return {'status': 'healthy'}
+
+    if __name__ == '__main__':
+        print("Starting dummy metrics app on port 8080...")
+        app.run(host='0.0.0.0', port=8080)
