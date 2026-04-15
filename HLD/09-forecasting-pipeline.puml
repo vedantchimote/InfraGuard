@@ -1,0 +1,61 @@
+@startuml InfraGuard Forecasting Pipeline
+!theme plain
+
+title InfraGuard - Time-Series Forecasting Pipeline (Optional Feature)
+
+start
+
+:Receive Historical Metrics Data;
+note right
+  Input Requirements:
+  - Minimum 2 days of data
+  - 1-minute intervals
+  - Timestamp + value columns
+end note
+
+:Prepare Data for Prophet (ds, y format);
+
+:Fit Prophet Model with Seasonality;
+note right
+  Prophet Configuration:
+  - Daily seasonality: enabled
+  - Weekly seasonality: enabled
+  - Yearly seasonality: disabled
+  - Changepoint prior: 0.05
+end note
+
+:Generate 15-minute Forecast;
+
+:Extract Future Predictions;
+
+if (Threshold Defined?) then (Yes)
+  :Check for Threshold Breach;
+  
+  if (Breach Predicted?) then (Yes)
+    #LightCoral:Calculate Minutes Until Breach;
+    
+    :Build Forecast Result with Breach;
+    
+    :Send Predictive Alert;
+    note right
+      Alert Contains:
+      - Predicted breach time
+      - Predicted value
+      - Confidence intervals
+      - Minutes until breach
+      - Proactive runbook
+    end note
+  else (No)
+    #LightGreen:Build Forecast Result (No Breach);
+    
+    :Log Normal Prediction;
+  endif
+else (No)
+  :Build Forecast Result (No Threshold);
+  
+  :Log Prediction;
+endif
+
+stop
+
+@enduml

@@ -1,0 +1,81 @@
+@startuml InfraGuard Monitoring and Observability
+!theme plain
+
+title InfraGuard - Monitoring and Observability Architecture
+
+skinparam packageStyle rectangle
+
+package "Application Layer" {
+    component "InfraGuard Application" as App {
+        component "Health Server :8000" as Health
+        component "Logging Module" as Logging
+        component "Metrics Exporter" as Metrics
+    }
+}
+
+package "Observability Stack" {
+    database "Prometheus" as Prom {
+        storage "Time-Series Metrics DB"
+    }
+    
+    component "Grafana" as Graf {
+        component "InfraGuard Dashboard" as Dashboard
+    }
+    
+    storage "Log Files" as Logs {
+        file "infraguard.log"
+    }
+}
+
+package "Monitored Metrics" #LightYellow {
+    rectangle "Application Metrics" as AppMetrics
+    rectangle "System Metrics" as SysMetrics
+    rectangle "Business Metrics" as BizMetrics
+}
+
+package "Dashboard Panels" #LightBlue {
+    rectangle "Panel 1: CPU Utilization" as P1
+    rectangle "Panel 2: Memory Usage" as P2
+    rectangle "Panel 3: HTTP Error Rate" as P3
+    rectangle "Panel 4: Request Latency" as P4
+    rectangle "Panel 5: Anomaly Detection" as P5
+    rectangle "Panel 6: Alert Success Rate" as P6
+}
+
+Health --> Prom : "/health endpoint"
+Metrics --> Prom : "Export metrics"
+Logging --> Logs : "Write logs"
+
+Prom --> Graf : "Query API"
+
+AppMetrics --> Prom
+SysMetrics --> Prom
+BizMetrics --> Prom
+
+Dashboard --> P1
+Dashboard --> P2
+Dashboard --> P3
+Dashboard --> P4
+Dashboard --> P5
+Dashboard --> P6
+
+note right of Health
+  Health Check:
+  - GET /health
+  - Returns: 200 OK
+  - Checks:
+    * Prometheus connectivity
+    * Model loaded
+    * Config valid
+end note
+
+note right of Logging
+  Log Levels:
+  - DEBUG: Detailed diagnostics
+  - INFO: Normal operations
+  - WARNING: Potential issues
+  - ERROR: Failures
+  - CRITICAL: System failures
+end note
+
+@enduml

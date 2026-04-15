@@ -1,0 +1,70 @@
+@startuml InfraGuard System Architecture
+!define RECTANGLE class
+
+skinparam backgroundColor #FEFEFE
+skinparam componentStyle rectangle
+
+title InfraGuard - High-Level System Architecture
+
+package "External Systems" {
+    database "Prometheus Time-Series DB" as Prom #LightBlue
+    component "Slack Notifications" as Slack #LightGreen
+    component "Jira Issue Tracking" as Jira #LightCoral
+    component "Grafana Dashboards" as Grafana #LightYellow
+}
+
+package "InfraGuard Application" {
+    
+    package "Collection Layer" #LightYellow {
+        component "Metrics Collector" as Collector
+        component "Data Formatter" as Formatter
+    }
+    
+    package "Intelligence Layer" #Plum {
+        component "ML Anomaly Detector" as MLDetector
+        component "Time-Series Forecaster" as Forecaster
+    }
+    
+    package "Alerting Layer" #LightGreen {
+        component "Alert Manager" as AlertMgr
+        component "Runbook Mapper" as RunbookMap
+    }
+    
+    package "Configuration" #LightPink {
+        component "Settings Manager" as Settings
+    }
+    
+    Collector --> Formatter : "Transform Metrics"
+    Formatter --> MLDetector : "Formatted Data"
+    Formatter --> Forecaster : "Historical Trends"
+    MLDetector --> AlertMgr : "Anomaly Detected"
+    Forecaster --> AlertMgr : "Threshold Breach Predicted"
+    AlertMgr --> RunbookMap : "Get Runbook"
+    
+    Settings ..> Collector : "Configure"
+    Settings ..> MLDetector : "Configure"
+    Settings ..> AlertMgr : "Configure"
+}
+
+Prom -down-> Collector : "PromQL API (HTTP)"
+AlertMgr -down-> Slack : "Webhook (HTTPS)"
+AlertMgr -down-> Jira : "REST API (HTTPS)"
+Prom ..> Grafana : "Metrics Source"
+MLDetector ..> Grafana : "Anomaly Data"
+
+note right of "InfraGuard Application"
+  Core Capabilities:
+  - Intelligent anomaly detection
+  - Predictive failure analysis
+  - Automated incident tracking
+  - Contextual alerting
+end note
+
+note left of Prom
+  Data Source:
+  - Infrastructure metrics
+  - Application metrics
+  - Custom metrics
+end note
+
+@enduml

@@ -1,0 +1,82 @@
+@startuml InfraGuard Deployment Architecture - Kubernetes
+!theme plain
+
+title InfraGuard - Kubernetes Deployment Architecture
+
+skinparam packageStyle rectangle
+
+cloud "External Services" #FCE4EC {
+    component "Slack API" as SlackAPI
+    component "Jira API" as JiraAPI
+}
+
+package "Kubernetes Cluster" {
+    
+    package "Monitoring Namespace" #FFF3E0 {
+        node "Prometheus Pod" as PromPod {
+            component "Prometheus\n:9090" as Prom
+        }
+        node "Grafana Pod" as GrafanaPod {
+            component "Grafana\n:3000" as Graf
+        }
+    }
+    
+    package "InfraGuard Namespace" #E8F5E9 {
+        node "InfraGuard Pod" as IGPod {
+            component "InfraGuard\nApplication" as IGApp
+        }
+        storage "ConfigMap" as ConfigMap {
+            file "settings.yaml"
+        }
+        storage "Secret" as Secret {
+            file "API Credentials"
+        }
+        storage "PersistentVolumeClaim" as PVC {
+            folder "ML Models"
+        }
+        
+        ConfigMap ..> IGPod : "Mount"
+        Secret ..> IGPod : "Mount"
+        PVC ..> IGPod : "Mount"
+    }
+    
+    package "Application Namespace" #F3E5F5 {
+        node "App Pod 1" as App1
+        node "App Pod 2" as App2
+        node "App Pod 3" as App3
+    }
+    
+    App1 --> Prom : "Expose\nMetrics"
+    App2 --> Prom : "Expose\nMetrics"
+    App3 --> Prom : "Expose\nMetrics"
+    
+    IGApp --> Prom : "Query\nMetrics"
+    Graf --> Prom : "Query\nMetrics"
+}
+
+IGApp --> SlackAPI : "HTTPS"
+IGApp --> JiraAPI : "HTTPS"
+
+note right of ConfigMap
+  Configuration:
+  - Prometheus URL
+  - PromQL queries
+  - ML model settings
+  - Alert thresholds
+end note
+
+note right of Secret
+  Secrets:
+  - Slack webhook URL
+  - Jira API token
+  - Jira credentials
+end note
+
+note right of PVC
+  Persistent Storage:
+  - isolation_forest.pkl
+  - Model artifacts
+  - Training data
+end note
+
+@enduml

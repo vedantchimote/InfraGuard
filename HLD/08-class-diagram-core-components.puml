@@ -1,0 +1,148 @@
+@startuml InfraGuard Core Components Class Diagram
+!theme plain
+
+title InfraGuard - Core Components Class Diagram
+
+package "Collection Layer" #FFF3E0 {
+    class PrometheusCollector {
+        - prometheus_url: str
+        - queries: dict
+        - timeout_seconds: int
+        - http_session: Session
+        + __init__(config: dict)
+        + collect_metrics(): DataFrame
+        + execute_query(query: str): dict
+        - _build_query_url(query: str): str
+        - _handle_api_error(error: Exception): None
+    }
+    
+    class DataFormatter {
+        + format_prometheus_response(response: dict): DataFrame
+        + normalize_timestamps(df: DataFrame): DataFrame
+        + add_feature_columns(df: DataFrame): DataFrame
+        - _extract_metric_values(response: dict): list
+        - _parse_timestamp(ts: float): datetime
+    }
+}
+
+package "Intelligence Layer" #F3E5F5 {
+    class IsolationForestDetector {
+        - model: IsolationForest
+        - confidence_threshold: float
+        - model_path: str
+        - is_trained: bool
+        + __init__(config: dict)
+        + load_model(path: str): None
+        + train(data: DataFrame): None
+        + save_model(path: str): None
+        + detect_anomalies(data: DataFrame): AnomalyResult
+        + compute_confidence(scores: ndarray): float
+        - _validate_input(data: DataFrame): bool
+        - _extract_features(data: DataFrame): ndarray
+    }
+    
+    class AnomalyResult {
+        + is_anomaly: bool
+        + confidence: float
+        + scores: ndarray
+        + anomalous_points: DataFrame
+        + metadata: dict
+        + to_dict(): dict
+    }
+    
+    class TimeSeriesForecaster {
+        - model: Prophet
+        - prediction_window_minutes: int
+        - thresholds: dict
+        + __init__(config: dict)
+        + forecast(data: DataFrame): ForecastResult
+        + predict_threshold_breach(forecast: DataFrame, threshold: float): bool
+        - _prepare_prophet_data(data: DataFrame): DataFrame
+        - _fit_model(data: DataFrame): None
+    }
+    
+    class ForecastResult {
+        + predictions: DataFrame
+        + breach_time: datetime
+        + breach_value: float
+        + confidence_interval_lower: float
+        + confidence_interval_upper: float
+        + to_dict(): dict
+    }
+}
+
+package "Alerting Layer" #E8F5E9 {
+    class AlertManager {
+        - slack: SlackNotifier
+        - jira: JiraNotifier
+        - runbook_mapper: RunbookMapper
+        - config: dict
+        + __init__(config: dict)
+        + send_alert(anomaly: AnomalyResult, metric_name: str): AlertStatus
+        + send_forecast_alert(forecast: ForecastResult, metric_name: str): AlertStatus
+        - _build_alert_payload(data: dict): dict
+        - _log_alert_delivery(status: AlertStatus): None
+    }
+    
+    class SlackNotifier {
+        - webhook_url: str
+        - channel: str
+        - retry_count: int
+        + __init__(config: dict)
+        + send_message(payload: dict): bool
+        - _format_message(payload: dict): dict
+        - _retry_send(payload: dict): bool
+    }
+    
+    class JiraNotifier {
+        - api_url: str
+        - project_key: str
+        - username: str
+        - api_token: str
+        + __init__(config: dict)
+        + create_ticket(payload: dict): str
+        - _format_ticket(payload: dict): dict
+        - _authenticate(): Session
+    }
+    
+    class RunbookMapper {
+        - mappings: dict
+        + __init__(config: dict)
+        + get_runbook(metric_name: str, anomaly_type: str): str
+        + load_mappings(path: str): None
+    }
+    
+    class AlertStatus {
+        + slack_success: bool
+        + jira_success: bool
+        + jira_ticket_id: str
+        + errors: list
+        + to_dict(): dict
+    }
+}
+
+package "Configuration" #FCE4EC {
+    class ConfigurationManager {
+        - config_path: str
+        - config: dict
+        + __init__(config_path: str)
+        + load_config(): dict
+        + get(key: str, default: any): any
+        + validate_config(): bool
+        - _load_yaml(path: str): dict
+    }
+}
+
+' Relationships
+PrometheusCollector --> DataFormatter : uses
+IsolationForestDetector --> AnomalyResult : returns
+TimeSeriesForecaster --> ForecastResult : returns
+AlertManager --> SlackNotifier : uses
+AlertManager --> JiraNotifier : uses
+AlertManager --> RunbookMapper : uses
+AlertManager --> AlertStatus : returns
+ConfigurationManager ..> PrometheusCollector : configures
+ConfigurationManager ..> IsolationForestDetector : configures
+ConfigurationManager ..> AlertManager : configures
+
+@enduml

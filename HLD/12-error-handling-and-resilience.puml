@@ -1,0 +1,98 @@
+@startuml InfraGuard Error Handling and Resilience
+!theme plain
+
+title InfraGuard - Error Handling and Resilience Patterns
+
+skinparam packageStyle rectangle
+
+package "Resilience Patterns" {
+    
+    package "Retry Logic" #FFF3E0 {
+        component "Exponential Backoff" as Backoff
+        component "Circuit Breaker" as Circuit
+        component "Timeout Management" as Timeout
+        
+        note right of Backoff
+          Retry Strategy:
+          - Initial delay: 1s
+          - Max retries: 3
+          - Backoff multiplier: 2x
+          - Max delay: 30s
+        end note
+        
+        note right of Circuit
+          Circuit States:
+          - Closed: Normal operation
+          - Open: Fail fast
+          - Half-Open: Test recovery
+          
+          Thresholds:
+          - Failure rate: 50 percent
+          - Min requests: 10
+          - Wait duration: 60s
+        end note
+    }
+    
+    package "Fallback Mechanisms" #E8F5E9 {
+        component "Graceful Degradation" as Degradation
+        component "Default Values" as Defaults
+        component "Cache Fallback" as Cache
+        
+        note right of Degradation
+          Degradation Strategy:
+          - Skip forecasting if Prophet fails
+          - Continue with anomaly detection
+          - Log warnings, don't crash
+          - Partial functionality better than none
+        end note
+    }
+    
+    package "Error Recovery" #F3E5F5 {
+        component "Health Checks" as Health
+        component "Auto Restart" as Restart
+        component "State Recovery" as State
+        
+        note right of Health
+          Health Monitoring:
+          - Liveness probe: /health
+          - Readiness probe: /ready
+          - Startup probe: /startup
+          - Check interval: 30s
+        end note
+    }
+}
+
+package "Error Scenarios" {
+    rectangle "Prometheus Unavailable" as E1
+    rectangle "Model Load Failure" as E2
+    rectangle "Slack/Jira API Failure" as E3
+    rectangle "Invalid Metric Data" as E4
+    rectangle "Memory Exhaustion" as E5
+}
+
+Backoff --> E1
+Circuit --> E1
+Timeout --> E1
+
+Defaults --> E2
+State --> E2
+
+Backoff --> E3
+Degradation --> E3
+
+Defaults --> E4
+Degradation --> E4
+
+Cache --> E5
+Restart --> E5
+
+note bottom
+  Resilience Principles:
+  - Fail fast, recover quickly
+  - Isolate failures
+  - Degrade gracefully
+  - Monitor and alert
+  - Self-healing where possible
+end note
+
+@enduml

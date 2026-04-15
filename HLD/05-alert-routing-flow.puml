@@ -1,0 +1,61 @@
+@startuml InfraGuard Alert Routing Flow
+!theme plain
+
+title InfraGuard - Alert Routing Flow
+
+start
+
+:Anomaly Detected;
+#LightYellow:Get Metric Type\n& Confidence;
+
+if (Confidence >\nThreshold?) then (No)
+  #LightGray:Log Detection\nNo Alert;
+  stop
+else (Yes)
+  #LightBlue:Lookup Runbook\nfrom Config;
+  
+  #LightCyan:Build Alert Payload:
+  • Metric details
+  • Confidence %
+  • Timestamp
+  • Runbook URL;
+  
+  fork
+    :Send to Jira;
+    if (Success?) then (Yes)
+      #LightGreen:Log Ticket ID;
+    else (No)
+      if (Retry?) then (Yes)
+        :Retry Jira;
+      else (No)
+        #LightCoral:Log Error;
+      endif
+    endif
+  fork again
+    :Send to Slack;
+    if (Success?) then (Yes)
+      #LightGreen:Log Success;
+    else (No)
+      if (Retry Once?) then (Yes)
+        :Retry Slack;
+      else (No)
+        #LightCoral:Log Error;
+      endif
+    endif
+  end fork
+  
+  #LightGreen:Complete;
+  stop
+endif
+
+note right
+  Alert Channels:
+  - Jira: Incident tracking
+  - Slack: Real-time notifications
+  
+  Retry Logic:
+  - Jira: Configurable retries
+  - Slack: 1 retry after 10s
+end note
+
+@enduml

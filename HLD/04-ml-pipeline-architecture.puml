@@ -1,0 +1,45 @@
+@startuml InfraGuard ML Pipeline Architecture
+!theme plain
+
+title InfraGuard - ML Pipeline Architecture
+
+skinparam packageStyle rectangle
+
+package "Training Phase (Offline)" #E8F5E9 {
+    database "Historical Metrics" as H1
+    component "Extract Features" as H2
+    component "Train Isolation Forest" as H3
+    component "Validate Model" as H4
+    component "Serialize to .pkl" as H5
+    
+    H1 -down-> H2
+    H2 -down-> H3
+    H3 -down-> H4
+    H4 -down-> H5
+}
+
+package "Runtime Phase (Online)" #E3F2FD {
+    component "Load Model from Disk" as R1
+    component "Receive Live Metrics" as R2
+    component "Feature Extraction" as R3
+    component "Predict Anomaly Score" as R4
+    component "Check Score" as R5
+    component "Calculate Confidence" as R6
+    component "Check Confidence" as R7
+    component "Trigger Alert" as R8
+    component "Log Normal" as R9
+    
+    R1 -down-> R2
+    R2 -down-> R3
+    R3 -down-> R4
+    R4 -down-> R5
+    R5 -down-> R6 : Yes
+    R5 -right-> R9 : No
+    R6 -down-> R7
+    R7 -down-> R8 : Yes
+    R7 -right-> R9 : No
+}
+
+H5 ..> R1 : "Model File (.pkl)"
+
+@enduml

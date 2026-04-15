@@ -1,0 +1,97 @@
+@startuml InfraGuard Security Architecture
+!theme plain
+
+title InfraGuard - Security Architecture
+
+skinparam packageStyle rectangle
+
+package "External Communication" #FCE4EC {
+    cloud "Slack API" as Slack {
+        component "HTTPS\nWebhook"
+    }
+    
+    cloud "Jira API" as Jira {
+        component "HTTPS\nREST API"
+    }
+    
+    cloud "Prometheus" as Prom {
+        component "HTTP/HTTPS\nQuery API"
+    }
+}
+
+package "InfraGuard Application" {
+    
+    package "Security Layer" #FFF3E0 {
+        component "TLS/SSL\nEncryption" as TLS
+        component "API Token\nManagement" as Tokens
+        component "Secrets\nManager" as Secrets
+        component "Input\nValidation" as Validation
+    }
+    
+    package "Application Core" #E8F5E9 {
+        component "InfraGuard\nServices" as Services
+    }
+    
+    package "Configuration" #F3E5F5 {
+        storage "Kubernetes\nSecrets" as K8sSecrets {
+            file "slack_webhook_url"
+            file "jira_api_token"
+            file "jira_credentials"
+        }
+        
+        storage "ConfigMap" as ConfigMap {
+            file "settings.yaml"
+            note right: Non-sensitive config
+        }
+    }
+}
+
+Services --> TLS : "Use"
+Services --> Tokens : "Use"
+Services --> Validation : "Use"
+
+TLS --> Slack : "HTTPS"
+TLS --> Jira : "HTTPS"
+TLS --> Prom : "HTTP/HTTPS"
+
+Tokens --> Secrets : "Retrieve"
+Secrets --> K8sSecrets : "Mount"
+
+note right of TLS
+  Encryption:
+  - TLS 1.2+ for external APIs
+  - Certificate validation
+  - Secure cipher suites
+end note
+
+note right of Tokens
+  Token Management:
+  - API tokens stored in secrets
+  - No hardcoded credentials
+  - Token rotation support
+  - Least privilege access
+end note
+
+note right of Validation
+  Input Validation:
+  - Sanitize PromQL queries
+  - Validate metric data
+  - Prevent injection attacks
+  - Rate limiting
+end note
+
+note bottom of K8sSecrets
+  Secret Management:
+  - Kubernetes Secrets (base64)
+  - Environment variables
+  - File mounts
+  - RBAC policies
+  
+  Best Practices:
+  - Use external secret managers
+    (AWS Secrets Manager, Vault)
+  - Rotate credentials regularly
+  - Audit secret access
+end note
+
+@enduml

@@ -1,0 +1,60 @@
+@startuml InfraGuard Component Interaction Sequence
+!theme plain
+
+title InfraGuard - Component Interaction Sequence (1-Minute Cycle)
+
+participant "Scheduler" as Scheduler
+participant "Metrics Collector" as Collector
+participant "Prometheus API" as Prom
+participant "Data Formatter" as Formatter
+participant "ML Detector" as ML
+participant "Time Series Forecaster" as Forecaster
+participant "Alert Manager" as AlertMgr
+participant "Runbook Mapper" as Runbook
+participant "Jira API" as Jira
+participant "Slack Webhook" as Slack
+
+loop Every 1 Minute
+    Scheduler -> Collector: Trigger collection cycle
+    
+    Collector -> Prom: Execute PromQL queries
+    Prom --> Collector: Return JSON time-series data
+    
+    Collector -> Formatter: Transform raw metrics
+    Formatter --> Collector: Pandas DataFrame
+    
+    par Anomaly Detection
+        Collector -> ML: Evaluate metrics
+        ML -> ML: Compute anomaly scores
+        alt Normal Behavior
+            ML --> Collector: Score: 1 (Normal)
+        else Anomaly Detected
+            ML --> AlertMgr: Score: -1, Confidence: 94 pct
+        end
+    end
+    
+    par Predictive Analysis
+        Collector -> Forecaster: Historical trends
+        Forecaster -> Forecaster: Generate 15-min forecast
+        alt Within Normal Range
+            Forecaster --> Collector: Prediction: Normal
+        else Threshold Breach Predicted
+            Forecaster --> AlertMgr: Predicted failure in 15 min
+        end
+    end
+    
+    alt Alert Triggered
+        AlertMgr -> Runbook: Get runbook for metric type
+        Runbook --> AlertMgr: Runbook URL
+        
+        AlertMgr -> Jira: Create incident ticket (Priority: High)
+        Jira --> AlertMgr: Ticket ID: INC-1045
+        
+        AlertMgr -> Slack: Send formatted alert (with runbook and ticket)
+        Slack --> AlertMgr: 200 OK
+        
+        AlertMgr -> Scheduler: Log alert delivery status
+    end
+end
+
+@enduml

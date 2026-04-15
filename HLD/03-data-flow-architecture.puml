@@ -1,0 +1,85 @@
+@startuml InfraGuard Data Flow Architecture
+!theme plain
+
+title InfraGuard - Data Flow Architecture
+
+skinparam packageStyle rectangle
+
+package "Data Input" #E3F2FD {
+    database "Prometheus\nMetrics" as P1
+}
+
+package "Data Transformation" #FFF3E0 {
+    component "PromQL\nQueries" as Q1
+    component "JSON\nResponse" as J1
+    component "Pandas\nDataFrame" as DF
+}
+
+package "Processing Pipeline" #F3E5F5 {
+    component "Normalize\nTimestamps" as N1
+    component "Feature\nEngineering" as N2
+    component "Sliding\nWindow" as N3
+}
+
+package "ML Pipeline" #E8F5E9 {
+    component "Load Pre-trained\nModel" as T1
+    component "Compute\nAnomaly Scores" as T2
+    component "Apply\nThreshold" as T3
+}
+
+package "Alert Output" #FCE4EC {
+    component "Anomaly\nMetadata" as A1
+    component "Runbook\nContext" as A2
+    component "Alert\nPayload" as A3
+}
+
+package "Delivery Channels" #FFF9C4 {
+    component "Slack" as S1
+    component "Jira" as J2
+}
+
+P1 -right-> Q1
+Q1 -right-> J1
+J1 -right-> DF
+
+DF -down-> N1
+N1 -down-> N2
+N2 -down-> N3
+
+N3 -down-> T1
+T1 -down-> T2
+T2 -down-> T3
+
+T3 -down-> A1
+A1 -down-> A2
+A2 -down-> A3
+
+A3 -down-> S1
+A3 -down-> J2
+
+note right of DF
+  DataFrame Schema:
+  - timestamp: datetime64
+  - metric_name: str
+  - value: float64
+  - instance: str
+  - labels: dict
+end note
+
+note right of N2
+  Engineered Features:
+  - rolling_mean_5m
+  - rolling_std_5m
+  - rate_of_change
+  - hour_of_day
+  - day_of_week
+end note
+
+note right of T2
+  Anomaly Scores:
+  - -1: Anomaly
+  - +1: Normal
+  - Confidence: 0-100 percent
+end note
+
+@enduml

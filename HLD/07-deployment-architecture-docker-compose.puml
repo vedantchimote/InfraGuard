@@ -1,0 +1,68 @@
+@startuml InfraGuard Deployment Architecture - Docker Compose
+!theme plain
+
+title InfraGuard - Local Development Environment (Docker Compose)
+
+actor "Developer" as Dev
+
+package "Docker Compose Environment" {
+    
+    package "Services" #FFF3E0 {
+        node "Prometheus Container" as PromContainer {
+            component "Prometheus\nPort: 9090" as Prom
+        }
+        node "Dummy App Container" as DummyApp {
+            component "Dummy App\nPort: 8080\nGenerates Metrics" as Dummy
+        }
+        node "InfraGuard Container" as IGContainer {
+            component "InfraGuard\nPort: 8000" as IG
+        }
+        node "Grafana Container" as GrafanaContainer {
+            component "Grafana\nPort: 3000" as Graf
+        }
+    }
+    
+    package "Volumes" #F3E5F5 {
+        storage "prometheus.yml" as PromConfig
+        storage "settings.yaml" as IGConfig
+        storage "models/" as Models
+    }
+    
+    PromConfig ..> PromContainer : "Mount"
+    IGConfig ..> IGContainer : "Mount"
+    Models ..> IGContainer : "Mount"
+    
+    Dummy --> Prom : "Scrape\n/metrics"
+    IG --> Prom : "Query API"
+    Graf --> Prom : "Query API"
+}
+
+Dev --> "Docker Compose Environment" : "docker-compose up"
+Dev --> Graf : "View\nDashboards"
+Dev --> IG : "View\nAlerts"
+
+note right of DummyApp
+  Dummy App:
+  - Generates synthetic metrics
+  - Simulates CPU, memory usage
+  - Exposes /metrics endpoint
+  - Used for testing
+end note
+
+note right of IGContainer
+  InfraGuard Container:
+  - Runs main application
+  - Mounts configuration
+  - Mounts ML models
+  - Health check on :8000
+end note
+
+note bottom of "Docker Compose Environment"
+  Quick Start:
+  1. docker-compose up -d
+  2. Access Grafana: http://localhost:3000
+  3. Access Prometheus: http://localhost:9090
+  4. View InfraGuard logs: docker-compose logs -f infraguard
+end note
+
+@enduml
